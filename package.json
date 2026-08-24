@@ -1,0 +1,15 @@
+{
+  "name": "scry-player",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A local media player for dark rooms — local files and YouTube, under one moon.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

@@ -1,0 +1,79 @@
+/* ───────────────────────────────────────────────────────────
+   Scry Player — darkness and moonlight on water.
+
+   The palette runs from abyss (deepest water) up through the
+   surface tones to `moon`, the only truly bright value. Nothing
+   else in the app is allowed to be brighter than the moon.
+   ─────────────────────────────────────────────────────────── */
+
+:root {
+  /* Depths */
+  --abyss: #04060c;
+  --deep: #070b14;
+  --surface: #0c121f;
+  --shallow: #121a2b;
+  --ripple: #1a2540;
+
+  /* Light */
+  --moon: #eef4ff;
+  --moon-soft: #cfdcf2;
+  --moon-dim: #8ba0c2;
+  --moon-faint: #5b6c8a;
+
+  /* Glow — the reflection colour */
+  --glow: #8fb6e8;
+  --glow-warm: #b9d4f5;
+  --glow-deep: #3d6ea8;
+
+  /* Accents */
+  --accent: var(--glow);
+  --danger: #d98a8a;
+
+  /* Glass panels */
+  --pane-bg: rgba(12, 18, 31, 0.58);
+  --pane-bg-solid: rgba(10, 15, 26, 0.92);
+  --pane-line: rgba(143, 182, 232, 0.14);
+  --pane-line-soft: rgba(143, 182, 232, 0.08);
+
+  /* Interaction */
+  --hover: rgba(143, 182, 232, 0.08);
+  --active: rgba(143, 182, 232, 0.16);
+  --focus: rgba(185, 212, 245, 0.55);
+
+  /* Type */
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  /* Geometry */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+
+  /* Depth */
+  --shadow-pane: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --halo: 0 0 22px rgba(143, 182, 232, 0.28);
+  --halo-strong: 0 0 34px rgba(185, 212, 245, 0.45);
+
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0.14, 0.3, 1);
+  --fast: 140ms;
+  --med: 260ms;
+  --slow: 520ms;
+
+  /* Layout */
+  --topbar-h: 68px;
+  --transport-h: 92px;
+}
+
+/* The app is dark by design — there is no light theme. But respect
+   users who ask for less movement: the water goes still. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 0ms;
+    --med: 0ms;
+    --slow: 0ms;
+  }
+}

@@ -1,0 +1,34 @@
+[package]
+name = "scry-player"
+version = "0.1.0"
+description = "Scry Player"
+authors = ["Darren Joseph"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# `_lib` suffix keeps the desktop binary and the mobile lib from colliding.
+name = "scry_player_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# The asset protocol is deliberately unused: WebKitGTK will not play media from
+# a custom URI scheme, so audio reaches the page as bytes instead.
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+lofty = "0.25"
+tiny_http = "0.12"
+uuid = { version = "1", features = ["v4"] }
+percent-encoding = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
