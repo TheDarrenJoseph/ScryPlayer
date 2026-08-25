@@ -59,7 +59,19 @@ export function createLocalPanel(controller, queue, { setStatus }) {
         await controller.setActive('local');
         await controller.playAt(i);
       },
-      onRemove: (i) => queue.removeAt(i),
+      onRemove: (i) => {
+        // Stop before we clear the queue as we can't pause without anything in the queue
+        if (queue.length === 1) {
+          // Stop playing
+          controller.stop()
+          // Clear down the queue entirely
+          queue.clear()
+          // Emit no track to reset the currently playing track
+          controller.emit('track', { track: null });
+        } else {
+          queue.removeAt(i)
+        }
+      },
       emptyLines: ['The queue is still.', 'Add a folder, or pick tracks from the library.'],
     });
   }
@@ -200,8 +212,6 @@ export function createLocalPanel(controller, queue, { setStatus }) {
   $('btn-pick-files').addEventListener('click', async () => {
     await addFiles(await pickFiles(currentPath));
   });
-
-  $('btn-clear-local').addEventListener('click', () => queue.clear());
 
   queue.on('change', paintQueue);
   controller.on('state', paintQueue);

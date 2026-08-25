@@ -152,7 +152,7 @@ export class Controller extends Emitter {
     }
   }
 
-  async toggle() {
+  toggle() {
     const active = this.#active;
     if (!active) return;
     const { adapter, queue } = active;
@@ -164,7 +164,17 @@ export class Controller extends Emitter {
     if (!adapter.snapshot().loaded) return this.playAt(queue.index);
 
     if (this.state.playing) adapter.pause();
-    else await adapter.play();
+    else adapter.play();
+  }
+
+  stop() {
+    const active = this.#active;
+    if (!active) return;
+
+    const { adapter, queue } = active;
+
+    if (!queue.length) return;
+    if (this.state.playing) adapter.pause();
   }
 
   async #advance(auto) {

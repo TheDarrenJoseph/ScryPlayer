@@ -18,8 +18,8 @@ export function renderQueue(listEl, queue, { playing, onPlay, onRemove, emptyLin
 
   const frag = document.createDocumentFragment();
 
-  queue.items.forEach((track, i) => {
-    const isCurrent = i === queue.index;
+  queue.items.forEach((track, index) => {
+    const isCurrent = index === queue.index;
 
     const row = el('li', 'row');
     row.classList.toggle('is-playing', isCurrent);
@@ -27,7 +27,7 @@ export function renderQueue(listEl, queue, { playing, onPlay, onRemove, emptyLin
     if (track.playable === false) row.classList.add('is-unplayable');
 
     // The playing row swaps its number for the animated bars.
-    row.appendChild(isCurrent ? playingBars() : el('span', 'row__index', String(i + 1)));
+    row.appendChild(isCurrent ? playingBars() : el('span', 'row__index', String(index + 1)));
 
     const body = el('div', 'row__body');
     body.appendChild(el('div', 'row__name', track.title || track.fileName || 'Unknown'));
@@ -43,21 +43,27 @@ export function renderQueue(listEl, queue, { playing, onPlay, onRemove, emptyLin
       row.appendChild(el('span', 'row__time', formatTime(track.duration)));
     }
 
-    const remove = el('button', 'row__add');
-    remove.type = 'button';
-    remove.title = 'Remove from queue';
-    remove.setAttribute('aria-label', `Remove ${track.title ?? 'track'} from queue`);
-    remove.appendChild(icon(PATHS.close, ''));
-    remove.addEventListener('click', (e) => {
-      e.stopPropagation(); // Removing a row must not also play it.
-      onRemove(i);
-    });
+    const remove = createRemoveButton(track, index, onRemove);
     row.appendChild(remove);
 
-    row.addEventListener('click', () => onPlay(i));
-
+    // Play whatever queue item is selected
+    row.addEventListener('click', () => onPlay(index));
     frag.appendChild(row);
   });
 
   listEl.appendChild(frag);
+}
+
+function createRemoveButton(track, index, onRemove) {
+  const remove = el('button', 'row__add');
+  remove.type = 'button';
+  remove.title = 'Remove from queue';
+  remove.setAttribute('aria-label', `Remove ${track.title ?? 'track'} from queue`);
+  remove.appendChild(icon(PATHS.close, ''));
+  remove.addEventListener('click', (e) => {
+    e.stopPropagation(); // Removing a row must not also play it.
+    onRemove(index);
+  });
+
+  return remove;
 }

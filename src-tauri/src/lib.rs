@@ -74,10 +74,9 @@ fn to_string_path(path: PathBuf) -> String {
 #[tauri::command]
 fn shortcuts(app: AppHandle) -> Vec<Shortcut> {
     let resolver = app.path();
-    let candidates: [(&str, Option<PathBuf>); 4] = [
-        ("Music", resolver.audio_dir().ok()),
+    let candidates: [(&str, Option<PathBuf>); 3] = [
         ("Home", resolver.home_dir().ok()),
-        ("Downloads", resolver.download_dir().ok()),
+        ("Music", resolver.audio_dir().ok()),
         ("Desktop", resolver.desktop_dir().ok()),
     ];
 

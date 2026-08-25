@@ -25,7 +25,19 @@ export function createYouTubePanel(controller, queue, { setStatus }) {
         await controller.setActive('youtube');
         await controller.playAt(i);
       },
-      onRemove: (i) => queue.removeAt(i),
+      onRemove: (i) => {
+        // Stop before we clear the queue as we can't pause without anything in the queue
+        if (queue.length === 1) {
+          // Stop playing
+          controller.stop()
+          // Clear down the queue entirely
+          queue.clear()
+          // Emit no track to reset the currently playing track
+          controller.emit('track', { track: null });
+        } else {
+          queue.removeAt(i)
+        }
+      },
       emptyLines: ['Nothing cued.', 'Paste a YouTube link above.'],
     });
   }
@@ -64,8 +76,6 @@ export function createYouTubePanel(controller, queue, { setStatus }) {
       setStatus('Added to the queue.');
     }
   });
-
-  $('btn-clear-youtube').addEventListener('click', () => queue.clear());
 
   // Reveal the iframe only once something is actually cued, so the empty state
   // is not a black rectangle.

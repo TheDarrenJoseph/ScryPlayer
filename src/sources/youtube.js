@@ -1,8 +1,8 @@
 /** An 11-character YouTube video id. */
-const ID_RE = /^[\w-]{11}$/;
-const HOST_RE = /^((m|www|music)\.)?youtube(-nocookie)?\.com$/;
+const VIDEO_ID_REGEX = /^[\w-]{11}$/;
+const HOST_REGEX = /^((m|www|music)\.)?youtube(-nocookie)?\.com$/;
 
-const asId = (v) => (typeof v === 'string' && ID_RE.test(v) ? v : null);
+const asId = (v) => (typeof v === 'string' && VIDEO_ID_REGEX.test(v) ? v : null);
 
 /**
  * Pull a video id (and playlist id, when present) out of whatever the user
@@ -27,24 +27,24 @@ export function parseYouTube(input) {
 
   const host = url.hostname.toLowerCase();
   const playlistId = url.searchParams.get('list');
-  const segments = url.pathname.split('/').filter(Boolean);
+  const path = url.pathname.split('/').filter(Boolean);
 
   let videoId = null;
 
+  // Check for the shortened URL
   if (host === 'youtu.be') {
-    videoId = asId(segments[0]);
-  } else if (HOST_RE.test(host)) {
-    if (url.pathname === '/watch') {
+    videoId = asId(path[0]);
+  } else if (HOST_REGEX.test(host) && url.pathname === '/watch') {
       videoId = asId(url.searchParams.get('v'));
-    } else if (['embed', 'v', 'shorts', 'live'].includes(segments[0])) {
-      videoId = asId(segments[1]);
-    }
   } else {
     return null;
   }
 
-  if (!videoId) return null;
-  return { videoId, playlistId };
+  if (videoId != null) {
+    return { videoId, playlistId };
+  } else {
+    return null;
+  }
 }
 
 /** Thumbnail URL — allowed by the app CSP's `img-src`. */

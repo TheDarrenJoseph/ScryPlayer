@@ -42,6 +42,23 @@ function main() {
   const localPanel = createLocalPanel(controller, localQueue, { setStatus });
   createYouTubePanel(controller, youtubeQueue, { setStatus });
 
+  // Hookup shared behavior between the two panels
+  let clearPlaylistButtons = document.getElementsByClassName('btn-clear-playlist');
+  for (const clearPlaylistButton of clearPlaylistButtons) {
+    clearPlaylistButton.addEventListener(
+        'click',
+        (e) => {
+          controller.stop();
+          if (e.currentTarget.id === "btn-clear-youtube") {
+            youtubeQueue.clear();
+
+          } else if (e.currentTarget.id === "btn-clear-local") {
+            localQueue.clear();
+          }
+        }
+    );
+  }
+
   controller.on('error', ({ message }) => setStatus(message, true));
 
   // ── Restore the last session ─────────────────────────────
