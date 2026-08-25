@@ -2,7 +2,7 @@
 
 A media player meant as a local web app
 
-Generated via [Claude Code](https://claude.com/product/claude-code)
+This was initially Generated via [Claude Code](https://claude.com/product/claude-code) just to see how well it can do from scratch for this particular set of requirements
 
 This player supports two sources: 
 1. Local files / folders
@@ -18,7 +18,15 @@ This player supports two sources:
 - **Backend** — Tauri 2 (Rust). Directory walking and audio tag reading
   ([lofty](https://crates.io/crates/lofty)), plus native file dialogs.
 
-## Requirements
+
+## Example Screenshots
+
+![Embedded YouTube player example](images/example_youtube_screenshot.png)
+![Local music player example](images/example_local_screenshot.png)
+
+## How to use
+
+### Requirements
 
 - Rust (stable, ≥ 1.77.2)
 - Node ≥ 18 — only to run the Tauri CLI
@@ -28,8 +36,9 @@ This player supports two sources:
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev
 ```
 
-## Running
+### Running
 
+Then you can run the app via:
 ```bash
 npm install
 npm run dev
@@ -39,22 +48,6 @@ npm run dev
 
 There is no frontend dev server of our own — Tauri serves `src/` directly and
 reloads the window when those files change.
-
-## Layout
-
-```
-src/                  frontend, served as-is
-  index.html
-  main.js             wiring + session persistence
-  tauri.js            the ONLY place that touches window.__TAURI__
-  core/               emitter, queue, playback controller
-  sources/            one adapter per media source
-  ui/                 transport, panels, picker, water backdrop
-  styles/             theme tokens + app styles
-src-tauri/
-  src/media.rs        filesystem walking + tag reading (no Tauri types; unit-tested)
-  src/lib.rs          Tauri commands and setup
-```
 
 ### How a source plugs in
 
