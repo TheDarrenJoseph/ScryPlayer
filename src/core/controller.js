@@ -152,6 +152,49 @@ export class Controller extends Emitter {
     }
   }
 
+  /**
+   * Drop one track from a source's queue, keeping playback in step.
+   *
+   * Removing the track that is playing advances to wherever a manual Next
+   * would have gone — resolved *before* the splice, since removing an item
+   * shifts every position after it down by one. Removing the last track leaves
+   * nothing to advance to, so playback settles instead. A paused listener stays
+   * paused: the next track is cued, not forced into sound.
+   */
+  removeAt(sourceId, index) {
+    const source = this.#sources.get(sourceId);
+    if (!source) return;
+
+    const { queue } = source;
+    if (index < 0 || index >= queue.length) return;
+
+    // A background queue drives nothing, and removing a track that is not the
+    // one playing leaves the cursor on it either way.
+    if (sourceId !== this.#activeId || index !== queue.index) {
+      queue.removeAt(index);
+      return;
+    }
+
+    const resume = this.state.playing;
+    const target = queue.nextIndex(false);
+
+    queue.removeAt(index);
+
+    if (!queue.length) {
+      this.stop();
+      this.emit('track', { track: null, index: -1, sourceId });
+      return;
+    }
+
+    // Wrapping a shuffled queue draws a fresh permutation, which can name the
+    // track being removed. Fall back to the slot it vacated — removeAt has
+    // already clamped that to something in range.
+    const next =
+      target === index ? queue.index : target > index ? target - 1 : target;
+
+    return this.playAt(next, { autoplay: resume });
+  }
+
   toggle() {
     const active = this.#active;
     if (!active) return;

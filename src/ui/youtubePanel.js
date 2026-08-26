@@ -25,19 +25,7 @@ export function createYouTubePanel(controller, queue, { setStatus }) {
         await controller.setActive('youtube');
         await controller.playAt(i);
       },
-      onRemove: (i) => {
-        // Stop before we clear the queue as we can't pause without anything in the queue
-        if (queue.length === 1) {
-          // Stop playing
-          controller.stop()
-          // Clear down the queue entirely
-          queue.clear()
-          // Emit no track to reset the currently playing track
-          controller.emit('track', { track: null });
-        } else {
-          queue.removeAt(i)
-        }
-      },
+      onRemove: (i) => controller.removeAt('youtube', i),
       emptyLines: ['Nothing cued.', 'Paste a YouTube link above.'],
     });
   }
