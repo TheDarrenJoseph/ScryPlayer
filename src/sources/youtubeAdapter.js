@@ -124,11 +124,13 @@ export class YouTubeAdapter extends Emitter {
       const mount = document.createElement('div');
       this.#host.replaceChildren(mount);
 
+      // No `modestbranding`: YouTube retired it in 2023 and ignores it now.
+      // Carrying it would only advertise an intent — hiding their mark — that
+      // the embed no longer honours, and that we have no business having.
       const playerVars = {
         autoplay: 0,
         controls: 1,
         rel: 0,
-        modestbranding: 1,
         playsinline: 1,
         iv_load_policy: 3,
       };
