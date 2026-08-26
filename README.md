@@ -148,6 +148,10 @@ All user-supplied text (filenames, tags, YouTube titles) reaches the DOM via
 - YouTube **playlist** URLs add only the linked video; whole-playlist expansion
   is not implemented.
 - Videos whose owners disabled embedding cannot play — YouTube's rule, not ours.
+- Age-restricted videos cannot play in an embed at all; YouTube sends the viewer
+  back to youtube.com instead.
+- The window will not shrink below 1000px wide. Narrower, the panes stack and the
+  16:9 player drops under the 200x200 an embedded player is required to keep.
 - Formats the WebView cannot decode (`.wma`, `.aiff`, …) are listed but marked
   unplayable rather than hidden.
 - Restored sessions cap at 500 tracks per queue, the practical `localStorage`

@@ -13,7 +13,7 @@
         "title": "Scry Player",
         "width": 1180,
         "height": 780,
-        "minWidth": 900,
+        "minWidth": 1000,
         "minHeight": 600,
         "resizable": true,
         "center": true,

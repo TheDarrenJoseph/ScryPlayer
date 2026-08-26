@@ -1048,6 +1048,10 @@ svg {
 
 /* ── Narrow windows ────────────────────────────────────── */
 
+/* Below the two-column layout the video pane is squeezed into a grid row, and
+   the 16:9 box inside it falls under the 200x200 the IFrame API requires of an
+   embedded player. The window's `minWidth` is held above this breakpoint so the
+   app cannot reach that state; the rules are kept for any narrower context. */
 @media (max-width: 980px) {
   .panel {
     grid-template-columns: 1fr;
