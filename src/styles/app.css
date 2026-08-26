@@ -846,6 +846,26 @@ svg {
   display: block;
 }
 
+/* The pair sits on a diagonal, so it fills less of its box than the other
+   icons do. A little less padding brings it back to their weight. */
+.iconbtn--dice {
+  padding: 5px;
+}
+
+/* The pips are the one solid part of an otherwise stroked icon set. */
+.dice__pip {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* Shuffle is the only control that leaves the moonlight palette when on.
+   An id, so it outranks the shared `[aria-pressed='true']` glow above and
+   keeps its colour through hover. */
+#btn-shuffle[aria-pressed='true'] {
+  color: var(--chance-soft);
+  filter: drop-shadow(0 0 7px var(--chance-halo));
+}
+
 .playbtn {
   display: grid;
   place-items: center;

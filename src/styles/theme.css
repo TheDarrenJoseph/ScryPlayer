@@ -29,6 +29,13 @@
   --accent: var(--glow);
   --danger: #d98a8a;
 
+  /* Chance — shuffle only. The one place the palette leaves the moonlight,
+     so a glance at the transport says whether the order is being meddled
+     with. Kept below the moon in brightness, like everything else. */
+  --chance: #c07ef0;
+  --chance-soft: #e3bcff;
+  --chance-halo: rgba(192, 126, 240, 0.7);
+
   /* Glass panels */
   --pane-bg: rgba(12, 18, 31, 0.58);
   --pane-bg-solid: rgba(10, 15, 26, 0.92);
