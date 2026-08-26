@@ -10,6 +10,8 @@
  * `ended`, so every listener in `localAdapter` would sit inert. Those need a
  * real engine, and faking them here would only test the fake.
  */
+import { readFileSync } from 'node:fs';
+
 import { JSDOM } from 'jsdom';
 
 /**
@@ -19,10 +21,28 @@ import { JSDOM } from 'jsdom';
  * @returns {{ window: Window, document: Document }}
  */
 export function installDom(html = '') {
-  const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, {
+  return install(new JSDOM(`<!doctype html><html><body>${html}</body></html>`, {
     pretendToBeVisual: true,
-  });
+    url: 'http://localhost/',
+  }));
+}
 
+/**
+ * Install the app's real `index.html` as the global DOM.
+ *
+ * Preferred over a hand-written fixture wherever a test needs more than a
+ * couple of elements: the markup cannot drift from the app the way a copy
+ * would. jsdom does not execute scripts unless asked, so the `main.js` module
+ * tag sits inert and the test decides what to import.
+ *
+ * @returns {{ window: Window, document: Document }}
+ */
+export function installAppDom() {
+  const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
+  return install(new JSDOM(html, { pretendToBeVisual: true, url: 'http://localhost/' }));
+}
+
+function install(dom) {
   const { window } = dom;
 
   global.window = window;
@@ -33,8 +53,38 @@ export function installDom(html = '') {
   global.Event = window.Event;
   global.KeyboardEvent = window.KeyboardEvent;
   global.MouseEvent = window.MouseEvent;
+  global.localStorage = window.localStorage;
+  // `LocalAdapter` builds one in its constructor. jsdom will not play it —
+  // `play()` throws and no media events ever fire — but it constructs, which
+  // is all anything outside the adapter's own tests needs.
+  global.Audio = window.Audio;
+
+  shimDialogs(window.document);
 
   return { window, document: window.document };
+}
+
+/**
+ * Give `<dialog>` just enough behaviour to observe.
+ *
+ * jsdom (30) does not implement the element at all — `showModal` is not a
+ * function. This makes `open` follow the calls, which is what lets a test say
+ * *our code opened it here and closed it there*. It says nothing about the
+ * real thing: modality, the focus trap, Escape and the backdrop are the
+ * browser's, and are the reason for using a native dialog in the first place.
+ */
+function shimDialogs(document) {
+  for (const el of document.querySelectorAll('dialog')) {
+    if (typeof el.showModal === 'function') return; // A real implementation; leave it be.
+    el.open = false;
+    el.showModal = () => {
+      el.open = true;
+    };
+    el.show = el.showModal;
+    el.close = () => {
+      el.open = false;
+    };
+  }
 }
 
 /** Dispatch a bubbling click, the way a real pointer would. */

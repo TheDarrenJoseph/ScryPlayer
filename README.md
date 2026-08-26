@@ -64,6 +64,17 @@ fires `timeupdate` or `ended`, so `localAdapter` and `youtubeAdapter` (and the
 canvas in `water.js`) are left to a real engine rather than tested against a
 fake that would only confirm itself.
 
+Two things worth knowing before trusting a green run:
+
+- Tests that need more than a couple of elements build their DOM from the real
+  `src/index.html` via `installAppDom()`, so a fixture cannot drift from the
+  markup. Each call mints a fresh window, and so a fresh `localStorage` — which
+  is what makes it a stand-in for restarting the app.
+- jsdom does not implement `<dialog>`, so the helper shims `showModal`/`close`.
+  The settings tests therefore prove *we* open and close at the right moments;
+  modality, focus trapping and Escape are the browser's, and are the whole
+  reason for using a native dialog. Those still want a click-through.
+
 There is no frontend dev server of our own — Tauri serves `src/` directly and
 reloads the window when those files change.
 

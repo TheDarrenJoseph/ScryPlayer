@@ -31,15 +31,19 @@ function main() {
   let disposeWater = null;
 
   function applyWater() {
+    // Hidden rather than cleared: the page background shows through, where
+    // clearing an opaque canvas would leave a black rectangle instead. Set
+    // before starting, since a hidden canvas measures zero and would never
+    // reach a size worth drawing into.
+    waterEl.hidden = !settings.water;
+
+    // Only the transitions touch the animation itself, so calling this on
+    // every settings change is free.
     if (settings.water && !disposeWater) {
-      waterEl.hidden = false;
       disposeWater = startWater(waterEl);
     } else if (!settings.water && disposeWater) {
       disposeWater();
       disposeWater = null;
-      // Hidden rather than cleared: the page background shows through, where
-      // clearing an opaque canvas would leave a black rectangle instead.
-      waterEl.hidden = true;
     }
   }
 
