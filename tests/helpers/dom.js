@@ -37,9 +37,28 @@ export function installDom(html = '') {
  *
  * @returns {{ window: Window, document: Document }}
  */
-export function installAppDom() {
+export function installAppDom({ styles = false } = {}) {
   const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
-  return install(new JSDOM(html, { pretendToBeVisual: true, url: 'http://localhost/' }));
+  const dom = new JSDOM(html, { pretendToBeVisual: true, url: 'http://localhost/' });
+  if (styles) injectStyles(dom.window.document);
+  return install(dom);
+}
+
+/**
+ * Inline the real stylesheets so `getComputedStyle` sees the actual cascade.
+ *
+ * Off by default — it is only worth the parse for tests that turn on what a
+ * rule *does*, rather than what an attribute says. jsdom does not fetch the
+ * `<link>` and does not follow `@import`, so both files go in by hand.
+ */
+function injectStyles(document) {
+  const dir = new URL('../../src/styles/', import.meta.url);
+  const theme = readFileSync(new URL('theme.css', dir), 'utf8');
+  const app = readFileSync(new URL('app.css', dir), 'utf8').replace(/@import[^;]+;/, '');
+
+  const style = document.createElement('style');
+  style.textContent = `${theme}\n${app}`;
+  document.head.appendChild(style);
 }
 
 function install(dom) {

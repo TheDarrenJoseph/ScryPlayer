@@ -61,8 +61,8 @@ let run = 0;
  * `main.js` runs its work on import, so each scenario needs its own module
  * instance — hence the query string, which makes the specifier unique.
  */
-async function boot({ session = SAVED, settings } = {}) {
-  const { window } = installAppDom();
+async function boot({ session = SAVED, settings, styles = false } = {}) {
+  const { window } = installAppDom({ styles });
   window.__TAURI__ = { core: { invoke: bridge.invoke } };
 
   bridge.calls = [];
@@ -147,28 +147,40 @@ describe('main', () => {
   });
 
   describe('the water', () => {
+    /**
+     * Whether the canvas is actually off the screen.
+     *
+     * Deliberately the computed style rather than the `hidden` attribute.
+     * `#water` sets `display: block`, which outranks the user agent's
+     * `[hidden] { display: none }` — so the attribute alone once read as
+     * hidden while the canvas sat there holding its last painted frame.
+     */
+    const gone = () => window.getComputedStyle($('water')).display === 'none';
+
     it('is shown by default', async () => {
-      await boot();
-      assert.equal($('water').hidden, false);
+      await boot({ styles: true });
+
+      assert.equal(gone(), false);
     });
 
-    it('is hidden when the setting is off', async () => {
-      await boot({ settings: { restoreSession: true, water: false } });
+    it('goes completely when the setting is off', async () => {
+      await boot({ settings: { restoreSession: true, water: false }, styles: true });
 
       assert.equal($('water').hidden, true);
+      assert.equal(gone(), true, 'the canvas must not be left showing its last frame');
     });
 
     it('follows the switch without a reload', async () => {
-      await boot();
-      assert.equal($('water').hidden, false);
+      await boot({ styles: true });
+      assert.equal(gone(), false);
 
       $('set-water').checked = false;
       $('set-water').dispatchEvent(new window.Event('change', { bubbles: true }));
-      assert.equal($('water').hidden, true);
+      assert.equal(gone(), true);
 
       $('set-water').checked = true;
       $('set-water').dispatchEvent(new window.Event('change', { bubbles: true }));
-      assert.equal($('water').hidden, false);
+      assert.equal(gone(), false, 'and comes back');
     });
   });
 
