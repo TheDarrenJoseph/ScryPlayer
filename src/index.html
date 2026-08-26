@@ -55,6 +55,14 @@
 
         <div class="topbar__end">
           <span class="status" id="status" role="status" aria-live="polite"></span>
+          <button class="iconbtn" id="btn-settings" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M9.44 5.81L9.62 3.01L10.76 2.78L12 5.3L14.56 5.81L16.67 3.96L17.64 4.61L16.74 7.26L18.19 9.44L20.99 9.62L21.22 10.76L18.7 12L18.19 14.56L20.04 16.67L19.39 17.64L16.74 16.74L14.56 18.19L14.38 20.99L13.24 21.22L12 18.7L9.44 18.19L7.33 20.04L6.36 19.39L7.26 16.74L5.81 14.56L3.01 14.38L2.78 13.24L5.3 12L5.81 9.44L3.96 7.33L4.61 6.36L7.26 7.26Z"
+              />
+              <circle cx="12" cy="12" r="3.1" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -216,6 +224,48 @@
         </div>
       </footer>
     </div>
+
+    <!-- A native dialog, so focus trapping, Escape and the backdrop come free. -->
+    <dialog class="settings" id="settings-dialog" aria-labelledby="settings-title">
+      <div class="settings__head">
+        <h2 class="settings__title" id="settings-title">Settings</h2>
+        <button class="iconbtn" id="btn-settings-close" title="Close" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+
+      <ul class="settings__list">
+        <li class="setting">
+          <div class="setting__text">
+            <label class="setting__name" for="set-restore">Restore last session</label>
+            <p class="setting__hint">
+              Bring back the queues and the source you were last using when the app opens.
+              Volume is remembered either way.
+            </p>
+          </div>
+          <input class="switch" type="checkbox" id="set-restore" />
+        </li>
+
+        <li class="setting">
+          <div class="setting__text">
+            <label class="setting__name" for="set-water">Moonlit water</label>
+            <p class="setting__hint">
+              The animation behind the app. Turning it off gives the battery a rest.
+            </p>
+          </div>
+          <input class="switch" type="checkbox" id="set-water" />
+        </li>
+      </ul>
+
+      <div class="settings__foot">
+        <p class="settings__note" id="settings-note" role="status" aria-live="polite"></p>
+        <button class="btn btn--ghost btn--sm btn--danger" type="button" id="btn-forget">
+          Forget saved session
+        </button>
+      </div>
+    </dialog>
 
     <script type="module" src="./main.js"></script>
   </body>

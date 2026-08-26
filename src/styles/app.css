@@ -158,6 +158,7 @@ svg {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -1053,4 +1054,133 @@ svg {
   .vol {
     display: none;
   }
+}
+
+/* ── Settings ──────────────────────────────────────────── */
+
+.settings {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--pane-line);
+  border-radius: var(--r-lg);
+  background: var(--pane-bg-solid);
+  color: var(--moon-soft);
+  box-shadow: var(--shadow-pane);
+}
+
+.settings::backdrop {
+  background: rgba(2, 4, 9, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.settings__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px 20px;
+  border-bottom: 1px solid var(--pane-line-soft);
+}
+
+.settings__title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--moon);
+}
+
+.settings__list {
+  padding: 6px 20px;
+}
+
+.setting {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+}
+
+.setting + .setting {
+  border-top: 1px solid var(--pane-line-soft);
+}
+
+.setting__name {
+  display: block;
+  font-size: 13.5px;
+  color: var(--moon);
+  cursor: pointer;
+}
+
+.setting__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--moon-faint);
+}
+
+.settings__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--pane-line-soft);
+}
+
+.settings__note {
+  font-size: 12px;
+  color: var(--moon-faint);
+}
+
+.btn--danger:hover {
+  color: var(--danger);
+  border-color: rgba(217, 138, 138, 0.4);
+}
+
+/* A checkbox wearing a switch. Still a checkbox to the keyboard and to
+   assistive tech, which is the point. */
+.switch {
+  position: relative;
+  flex: none;
+  appearance: none;
+  width: 40px;
+  height: 22px;
+  margin-top: 2px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--pane-line);
+  background: var(--shallow);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--moon-faint);
+  transition:
+    transform var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+
+.switch:checked {
+  background: var(--glow-deep);
+  border-color: var(--glow);
+}
+
+.switch:checked::after {
+  transform: translateX(18px);
+  background: var(--moon);
+}
+
+.switch:hover {
+  border-color: var(--glow);
 }

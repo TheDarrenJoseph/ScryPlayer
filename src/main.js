@@ -5,6 +5,7 @@ import { YouTubeAdapter } from './sources/youtubeAdapter.js';
 import { createLocalPanel } from './ui/localPanel.js';
 import { createPicker } from './ui/picker.js';
 import { createStatus } from './ui/status.js';
+import { createSettings, loadSettings } from './ui/settings.js';
 import { createTransport } from './ui/transport.js';
 import { createYouTubePanel } from './ui/youtubePanel.js';
 import { startWater } from './ui/water.js';
@@ -24,7 +25,25 @@ function loadState() {
 }
 
 function main() {
-  startWater(document.getElementById('water'));
+  const settings = loadSettings();
+
+  const waterEl = document.getElementById('water');
+  let disposeWater = null;
+
+  function applyWater() {
+    if (settings.water && !disposeWater) {
+      waterEl.hidden = false;
+      disposeWater = startWater(waterEl);
+    } else if (!settings.water && disposeWater) {
+      disposeWater();
+      disposeWater = null;
+      // Hidden rather than cleared: the page background shows through, where
+      // clearing an opaque canvas would leave a black rectangle instead.
+      waterEl.hidden = true;
+    }
+  }
+
+  applyWater();
   const setStatus = createStatus();
 
   const controller = new Controller();
@@ -52,16 +71,22 @@ function main() {
   // ── Restore the last session ─────────────────────────────
 
   const saved = loadState();
-  if (saved.localQueue) localQueue.restore(saved.localQueue);
-  if (saved.youtubeQueue) youtubeQueue.restore(saved.youtubeQueue);
 
-  // Asset-scope grants do not survive a restart, so restored local tracks have
-  // to be re-granted before anything tries to play them.
-  const restored = localQueue.items.map((t) => t.path).filter(Boolean);
-  if (restored.length) {
-    invoke('grant_paths', { paths: restored }).catch((err) => {
-      setStatus(`Could not restore access to the previous queue: ${err}`, true);
-    });
+  // The queues and the chosen source are the session; volume is a preference
+  // and comes back either way, since nobody means "and reset my volume" by
+  // turning this off.
+  if (settings.restoreSession) {
+    if (saved.localQueue) localQueue.restore(saved.localQueue);
+    if (saved.youtubeQueue) youtubeQueue.restore(saved.youtubeQueue);
+
+    // Asset-scope grants do not survive a restart, so restored local tracks
+    // have to be re-granted before anything tries to play them.
+    const restored = localQueue.items.map((t) => t.path).filter(Boolean);
+    if (restored.length) {
+      invoke('grant_paths', { paths: restored }).catch((err) => {
+        setStatus(`Could not restore access to the previous queue: ${err}`, true);
+      });
+    }
   }
 
   // Volume first, so whichever source becomes active inherits it.
@@ -69,7 +94,8 @@ function main() {
   controller.setMuted(!!saved.muted);
 
   const picker = createPicker(controller);
-  picker.select(saved.source === 'youtube' ? 'youtube' : 'local');
+  const startingSource = settings.restoreSession ? saved.source : null;
+  picker.select(startingSource === 'youtube' ? 'youtube' : 'local');
 
   localPanel.init();
 
@@ -110,6 +136,20 @@ function main() {
   controller.on('volume', persist);
   controller.on('source', persist);
   window.addEventListener('beforeunload', write);
+
+  // ── Settings ─────────────────────────────────────────────
+
+  createSettings(settings, {
+    onChange: applyWater,
+    onForget: () => {
+      clearTimeout(saveTimer); // A queued save would write the session straight back.
+      try {
+        localStorage.removeItem(STORE_KEY);
+      } catch {
+        // Nothing saved is the state we wanted anyway.
+      }
+    },
+  });
 }
 
 main();
