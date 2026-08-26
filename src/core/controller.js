@@ -167,14 +167,26 @@ export class Controller extends Emitter {
     else adapter.play();
   }
 
+  /**
+   * Halt playback and settle the transport back to zero.
+   *
+   * Unlike a pause there is nothing to resume — this is for when the queue is
+   * being emptied out from under the player — so the position goes with it.
+   * Deliberately makes no assumptions about the queue, so callers are free to
+   * stop before or after they empty it.
+   */
   stop() {
-    const active = this.#active;
-    if (!active) return;
+    const adapter = this.adapter;
+    if (!adapter) return;
 
-    const { adapter, queue } = active;
+    adapter.pause();
 
-    if (!queue.length) return;
-    if (this.state.playing) adapter.pause();
+    this.state.playing = false;
+    this.state.position = 0;
+    this.state.duration = 0;
+
+    this.emit('state', { playing: false });
+    this.emit('time', { position: 0, duration: 0 });
   }
 
   async #advance(auto) {
