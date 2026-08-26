@@ -195,6 +195,19 @@ export class Controller extends Emitter {
     return this.playAt(next, { autoplay: resume });
   }
 
+  /** Empty a source's queue, settling playback if it was the one playing. */
+  clearQueue(sourceId) {
+    const source = this.#sources.get(sourceId);
+    if (!source) return;
+
+    source.queue.clear();
+
+    if (sourceId !== this.#activeId) return;
+
+    this.stop();
+    this.emit('track', { track: null, index: -1, sourceId });
+  }
+
   toggle() {
     const active = this.#active;
     if (!active) return;
