@@ -46,6 +46,24 @@ npm run dev
 
 `npm run build` produces a bundled desktop binary in `src-tauri/target/release`.
 
+### Tests
+
+```bash
+npm run test:all
+```
+
+Both halves, no test framework on either side. The frontend runs on Node's own
+runner (`npm test`, or `npm run test:watch`); Rust runs under `cargo test`.
+`npm run test:coverage` adds a coverage table.
+
+Frontend tests live in `tests/`, out of `src/` because Tauri bundles that whole
+directory into the app. `jsdom` is the one dependency they add, and it covers
+`ui/` — element construction and event wiring. It does not stretch to the
+adapters: jsdom builds an `<audio>` element but `play()` throws and it never
+fires `timeupdate` or `ended`, so `localAdapter` and `youtubeAdapter` (and the
+canvas in `water.js`) are left to a real engine rather than tested against a
+fake that would only confirm itself.
+
 There is no frontend dev server of our own — Tauri serves `src/` directly and
 reloads the window when those files change.
 
