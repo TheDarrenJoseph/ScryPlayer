@@ -6,7 +6,10 @@ const asId = (v) => (typeof v === 'string' && VIDEO_ID_REGEX.test(v) ? v : null)
 
 /**
  * Pull a video id (and playlist id, when present) out of whatever the user
- * pasted — a watch link, a share link, a Shorts link, or a bare id.
+ * pasted — a watch link, a youtu.be share link, or a bare id.
+ *
+ * Ordinary videos only. Embed and Shorts URL forms are deliberately not
+ * accepted; they are not what anyone reaches for when queueing music.
  *
  * @returns {{ videoId: string, playlistId: string | null } | null}
  */
@@ -26,25 +29,18 @@ export function parseYouTube(input) {
   }
 
   const host = url.hostname.toLowerCase();
-  const playlistId = url.searchParams.get('list');
-  const path = url.pathname.split('/').filter(Boolean);
 
   let videoId = null;
 
-  // Check for the shortened URL
   if (host === 'youtu.be') {
-    videoId = asId(path[0]);
+    // The share form carries the id as the first path segment.
+    videoId = asId(url.pathname.split('/').filter(Boolean)[0]);
   } else if (HOST_REGEX.test(host) && url.pathname === '/watch') {
-      videoId = asId(url.searchParams.get('v'));
-  } else {
-    return null;
+    videoId = asId(url.searchParams.get('v'));
   }
 
-  if (videoId != null) {
-    return { videoId, playlistId };
-  } else {
-    return null;
-  }
+  if (!videoId) return null;
+  return { videoId, playlistId: url.searchParams.get('list') };
 }
 
 /** Thumbnail URL — allowed by the app CSP's `img-src`. */
