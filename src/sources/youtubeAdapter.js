@@ -127,9 +127,14 @@ export class YouTubeAdapter extends Emitter {
       // No `modestbranding`: YouTube retired it in 2023 and ignores it now.
       // Carrying it would only advertise an intent — hiding their mark — that
       // the embed no longer honours, and that we have no business having.
+      //
+      // `controls: 0` disable built in controls so we can use our own
+      // 'cc_load_policy: 0' disable closed captions by default is this is meant for music
       const playerVars = {
         autoplay: 0,
-        controls: 1,
+        controls: 0,
+        cc_load_policy: 0,
+        disablekb: 1,
         rel: 0,
         playsinline: 1,
         iv_load_policy: 3,
