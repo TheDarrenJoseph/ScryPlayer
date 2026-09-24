@@ -1,7 +1,7 @@
 import { Controller } from './core/controller.js';
 import { Queue } from './core/queue.js';
 import { LocalAdapter } from './sources/localAdapter.js';
-import { YouTubeAdapter } from './sources/youtubeAdapter.js';
+import { YouTubeBridgeAdapter } from './sources/youtubeBridgeAdapter.js';
 import { createLocalPanel } from './ui/localPanel.js';
 import { createPicker } from './ui/picker.js';
 import { createStatus } from './ui/status.js';
@@ -57,7 +57,7 @@ function main() {
   controller.register('local', new LocalAdapter(), localQueue);
   controller.register(
     'youtube',
-    new YouTubeAdapter(document.getElementById('yt-mount')),
+    new YouTubeBridgeAdapter(document.getElementById('yt-mount')),
     youtubeQueue,
   );
 

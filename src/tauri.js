@@ -29,6 +29,14 @@ export const invoke = api.core.invoke;
  */
 export const mediaUrl = (path) => invoke('media_url', { path });
 
+/**
+ * The loopback server's port, so the YouTube bridge iframe (see
+ * sources/youtubeBridgeAdapter.js) can be pointed at it directly.
+ *
+ * @returns {Promise<number>}
+ */
+export const mediaServerPort = () => invoke('media_server_port');
+
 // File dialogs are opened from Rust, so the frontend needs no dialog plugin.
 export const pickFolder = (startAt) => invoke('pick_folder', { startAt: startAt ?? null });
 export const pickFiles = (startAt) => invoke('pick_files', { startAt: startAt ?? null });

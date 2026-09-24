@@ -8,9 +8,9 @@ This player supports two sources:
 1. Local files / folders
 2. YouTube
 
-3. Switch between them with the picker at the top.
+Switch between them with the picker at the top.
 
-## Stack
+### Stack
 
 - **Frontend** — modern JS, no framework and **no bundler**. Plain ES modules
   loaded natively by the WebView, plain CSS. npm is only there to install the
@@ -18,13 +18,38 @@ This player supports two sources:
 - **Backend** — Tauri 2 (Rust). Directory walking and audio tag reading
   ([lofty](https://crates.io/crates/lofty)), plus native file dialogs.
 
+## Keyboard
+
+| Key | |
+|---|---|
+| `Space` | play / pause |
+| `←` `→` | seek ∓5s |
+| `Shift` `←` `→` | previous / next |
+| `↑` `↓` | volume |
+| `M` | mute |
+
 
 ## Example Screenshots
 
 ![Embedded YouTube player example](images/example_youtube_screenshot.png)
 ![Local music player example](images/example_local_screenshot.png)
 
-## How to use
+
+## Known limits
+
+- YouTube **playlist** URLs add only the linked video; whole-playlist expansion
+  is not implemented.
+- Videos whose owners disabled embedding cannot play — YouTube's rule, not ours.
+- Age-restricted videos cannot play in an embed at all; YouTube sends the viewer
+  back to youtube.com instead.
+- The window will not shrink below 1000px wide. Narrower, the panes stack and the
+  16:9 player drops under the 200x200 an embedded player is required to keep.
+- Formats the WebView cannot decode (`.wma`, `.aiff`, …) are listed but marked
+  unplayable rather than hidden.
+- Restored sessions cap at 500 tracks per queue, the practical `localStorage`
+  limit.
+
+## Dev Notes
 
 ### Requirements
 
@@ -60,12 +85,11 @@ Frontend tests live in `tests/`, out of `src/` because Tauri bundles that whole
 directory into the app. `jsdom` is the one dependency they add, and it covers
 `ui/` — element construction and event wiring. It does not stretch to the
 adapters: jsdom builds an `<audio>` element but `play()` throws and it never
-fires `timeupdate` or `ended`, so `localAdapter` and `youtubeAdapter` (and the
-canvas in `water.js`) are left to a real engine rather than tested against a
-fake that would only confirm itself.
+fires `timeupdate` or `ended`, so `localAdapter` and `youtubeBridgeAdapter`
+(and the canvas in `water.js`) are left to a real engine rather than tested
+against a fake that would only confirm itself.
 
-Two things worth knowing before trusting a green run:
-
+Two things worth knowing:
 - Tests that need more than a couple of elements build their DOM from the real
   `src/index.html` via `installAppDom()`, so a fixture cannot drift from the
   markup. Each call mints a fresh window, and so a fresh `localStorage` — which
@@ -78,24 +102,7 @@ Two things worth knowing before trusting a green run:
 There is no frontend dev server of our own — Tauri serves `src/` directly and
 reloads the window when those files change.
 
-### How a source plugs in
-
-`core/controller.js` owns every source and exposes one playback surface to the
-transport bar. A source is an **adapter** implementing:
-
-```
-load(track, { autoplay, volume, muted }) → Promise
-play() / pause() / seek(seconds) / setVolume(0..1) / setMuted(bool)
-snapshot() → { position, duration, playing, loaded }
-release()
-
-events: 'time' | 'state' | 'ended' | 'error' | 'meta'
-```
-
-Adding a third source means writing an adapter and calling
-`controller.register(id, adapter, queue)`. The transport bar needs no changes.
-
-## How local audio reaches the player
+### How local audio reaches the player
 
 Over a loopback HTTP server (`src-tauri/src/server.rs`), which is not the
 obvious choice — it is the only one that works. Both alternatives were tried
@@ -109,14 +116,27 @@ and measured on WebKitGTK:
 
 Dropouts were counted by recording the sink monitor during playback and
 running `silencedetect` over it. WebKitGTK's media pipeline refuses custom URI
-schemes outright, and its blob source is too slow to feed the decoder. Note
-that the failure is engine-level and hits every format — it looks like "MP3
-doesn't work", but FLAC fails identically.
+schemes outright, and its blob source is too slow to feed the decoder.
 
-Serving over http also means the engine streams and seeks by itself, with no
-file held in memory.
+### How YouTube gets a valid Referer
 
-## Security notes
+The main window loads from Tauri's own `tauri://` scheme, which has no real
+network address, and YouTube now hard-rejects an embed request that arrives
+with no `Referer` header at all.
+
+`youtube-embed.html` + `youtube-embed.js` (compiled into the binary,
+`src-tauri/src/server.rs`) are a second, tiny page served over the same
+loopback HTTP server local audio already uses (see
+["How local audio reaches the player"](#how-local-audio-reaches-the-player)).
+The main window embeds *that* as an iframe instead of embedding YouTube
+directly. Because the wrapper page has a genuine
+`http://127.0.0.1` origin, its own embed of the real YouTube iframe carries a
+normal Referer — solving the problem one level down, without the main
+window's own origin ever changing. `youtubeBridgeAdapter.js` talks to it over
+`postMessage` (play/pause/seek/volume out, state/time/meta back), presenting
+the same adapter interface every other source does.
+
+### Security notes
 
 `MediaScope` (in `lib.rs`) starts **empty**. Paths enter only via a file dialog
 or an explicit browse, and both the commands and the media server check against
@@ -132,32 +152,6 @@ dialog permissions at all.
 
 All user-supplied text (filenames, tags, YouTube titles) reaches the DOM via
 `textContent`, never `innerHTML`.
-
-## Keyboard
-
-| Key | |
-|---|---|
-| `Space` | play / pause |
-| `←` `→` | seek ∓5s |
-| `Shift` `←` `→` | previous / next |
-| `↑` `↓` | volume |
-| `M` | mute |
-
-## Known limits
-
-- YouTube **playlist** URLs add only the linked video; whole-playlist expansion
-  is not implemented.
-- Videos whose owners disabled embedding cannot play — YouTube's rule, not ours.
-- Age-restricted videos cannot play in an embed at all; YouTube sends the viewer
-  back to youtube.com instead.
-- The window will not shrink below 1000px wide. Narrower, the panes stack and the
-  16:9 player drops under the 200x200 an embedded player is required to keep.
-- Formats the WebView cannot decode (`.wma`, `.aiff`, …) are listed but marked
-  unplayable rather than hidden.
-- Restored sessions cap at 500 tracks per queue, the practical `localStorage`
-  limit.
-
-## Dev Notes
 
 ### Updating local screenshots
 
@@ -184,4 +178,3 @@ npm run release -- 0.2.0
 ```
 
 Bumps the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commits that, tags it, and — after asking for confirmation — pushes both. Refuses to run from a dirty tree, a branch other than `main`, or a `main` that's behind `origin/main`.
-

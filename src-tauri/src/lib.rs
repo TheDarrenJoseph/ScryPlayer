@@ -160,6 +160,14 @@ fn media_url(app: AppHandle, path: String) -> Result<String, String> {
     ))
 }
 
+/// The loopback server's port, so the YouTube bridge iframe (see
+/// `youtubeBridgeAdapter.js`) can be pointed at `/youtube-embed` directly.
+/// No token needed here — unlike `/media`, that route serves no user data.
+#[tauri::command]
+fn media_server_port(app: AppHandle) -> u16 {
+    app.state::<MediaServer>().port
+}
+
 /// Native folder picker.
 ///
 /// These commands are `async` on purpose: the blocking dialog helpers deadlock
@@ -217,6 +225,7 @@ pub fn run() {
             load_tracks,
             grant_paths,
             media_url,
+            media_server_port,
             pick_folder,
             pick_files
         ])

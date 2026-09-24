@@ -36,6 +36,42 @@ fn header(name: &str, value: &str) -> Header {
     Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("static header is valid")
 }
 
+// The YouTube bridge page (see `youtube-embed.js` for why it exists) and its
+// script, embedded at compile time. Both are tiny and static, so this is a
+// plain `include_str!` rather than pulling in a whole asset-embedding crate
+// for two files.
+const YOUTUBE_EMBED_HTML: &str = include_str!("../../src/youtube-embed.html");
+const YOUTUBE_EMBED_JS: &str = include_str!("../../src/youtube-embed.js");
+
+// Tauri only injects the app's CSP into pages it serves itself over its own
+// asset scheme, not into a response from this server, so the bridge page
+// needs its own — scoped to exactly what it does: run its own script, and
+// embed the real YouTube player.
+const YOUTUBE_EMBED_CSP: &str = "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' https://i.ytimg.com";
+
+/// Serves the YouTube bridge page and its script — the two `/youtube-embed*`
+/// routes, no token needed since neither carries anything user-specific.
+fn serve_youtube_embed(request: Request, path: &str) {
+    let (body, content_type, csp): (&str, &str, Option<&str>) = match path {
+        "/youtube-embed" => (YOUTUBE_EMBED_HTML, "text/html; charset=utf-8", Some(YOUTUBE_EMBED_CSP)),
+        "/youtube-embed.js" => (YOUTUBE_EMBED_JS, "text/javascript; charset=utf-8", None),
+        _ => return refuse(request, 404),
+    };
+
+    let mut headers = vec![header("Content-Type", content_type)];
+    if let Some(csp) = csp {
+        headers.push(header("Content-Security-Policy", csp));
+    }
+
+    let _ = request.respond(Response::new(
+        StatusCode(200),
+        headers,
+        body.as_bytes(),
+        Some(body.len()),
+        None,
+    ));
+}
+
 /// The media element needs a type it recognises; it will not sniff.
 fn mime_for(path: &Path) -> &'static str {
     let ext = path
@@ -189,7 +225,12 @@ pub fn start(scope: Arc<MediaScope>) -> Result<MediaServer, String> {
 
     std::thread::spawn(move || {
         for request in server.incoming_requests() {
-            handle(request, &scope, &worker_token);
+            let path = request.url().split('?').next().unwrap_or("/").to_string();
+            if path.starts_with("/youtube-embed") {
+                serve_youtube_embed(request, &path);
+            } else {
+                handle(request, &scope, &worker_token);
+            }
         }
     });
 

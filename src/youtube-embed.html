@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Scry Player — YouTube bridge</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #mount {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Served over http://127.0.0.1 (src-tauri/src/server.rs), not Tauri's
+      `tauri://` scheme — see youtubeBridgeAdapter.js for why. This page is
+      the one that actually embeds YouTube, so it needs a real origin to
+      hand YouTube a valid Referer; the main app window never has to change
+      to get one.
+    -->
+    <div id="mount"></div>
+    <script src="/youtube-embed.js"></script>
+  </body>
+</html>
