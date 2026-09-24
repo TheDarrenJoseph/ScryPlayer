@@ -55,8 +55,36 @@ jobs:
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-  release:
+  # A separate job, run once, rather than letting each matrix leg below ask
+  # tauri-action to find-or-create a release by tag name: two legs starting
+  # close together can both get "no release yet" and both create one, since
+  # a *draft* release isn't tied to a real tag until it's published. Known
+  # tauri-action issue: https://github.com/tauri-apps/tauri-action/issues/914.
+  # Creating it here first and having the matrix upload into that specific
+  # release id removes the race instead of just narrowing it.
+  create-release:
     needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - name: Create or reuse the draft release
+        id: create
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release create "${{ github.ref_name }}" \
+              --title "Scry Player ${{ github.ref_name }}" \
+              --notes "See the assets below to download and install this version." \
+              --draft
+          fi
+          id=$(gh release view "${{ github.ref_name }}" --json databaseId --jq .databaseId)
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -105,9 +133,7 @@ jobs:
           # Windows, where nothing reads the variable.
           APPIMAGE_EXTRACT_AND_RUN: '1'
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Scry Player ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download and install this version.'
-          releaseDraft: true
-          prerelease: false
+          # Uploads into the release created above instead of finding or
+          # creating one by tag — see the comment on create-release.
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --bundles ${{ matrix.bundles }}
