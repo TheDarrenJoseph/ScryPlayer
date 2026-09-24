@@ -5,6 +5,12 @@
 // and tags it. Pushing is a separate, explicit confirmation: this script
 // collapses the busywork, not the decision to actually ship.
 //
+// Every step checks the current state first and skips itself — with a line
+// saying so — when there's nothing to do. That makes it safe to re-run: a
+// first release tagging an already-correct 0.1.0, or a retry after an
+// earlier run got as far as the commit but not the tag, both just do
+// whatever's left.
+//
 //   node scripts/tag-release.js 0.2.0
 
 import { execFileSync } from 'node:child_process';
@@ -27,34 +33,41 @@ function git(args) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
 }
 
-function currentVersion(relPath) {
-  const text = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
-  const match = text.match(/"version":\s*"([^"]*)"/);
-  if (!match) usageAndExit(`Could not find a "version" field in ${relPath}.`);
-  return match[1];
-}
-
-// Whether the pattern matched — not whether the file's content changed — is
-// what says a field was found. Those are the same thing right up until the
-// version being set matches the one already there, which a first release
-// tagging an untouched 0.1.0 does on purpose.
-function bumpJsonVersion(relPath, version) {
+/** Reads and rewrites a `"version": "..."` field, reporting what it did. */
+function syncJsonVersion(relPath, version) {
   const file = path.join(repoRoot, relPath);
   const text = fs.readFileSync(file, 'utf8');
-  const pattern = /"version":\s*"[^"]*"/;
-  if (!pattern.test(text)) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+  const pattern = /"version":\s*"([^"]*)"/;
+  const match = text.match(pattern);
+  if (!match) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+
+  if (match[1] === version) {
+    console.log(`skipped ${relPath} (already ${version})`);
+    return false;
+  }
   fs.writeFileSync(file, text.replace(pattern, `"version": "${version}"`));
+  console.log(`updated ${relPath}`);
+  return true;
 }
 
-function bumpCargoVersion(relPath, version) {
+/** As above, for Cargo.toml's bare `version = "..."` form. */
+function syncCargoVersion(relPath, version) {
   const file = path.join(repoRoot, relPath);
   const text = fs.readFileSync(file, 'utf8');
   // Anchored so this only ever touches the [package] version, never a
   // dependency's — those are written as `name = { version = "...", ... }`
   // on one line, not a standalone `version = "..."` line.
-  const pattern = /^version = "[^"]*"/m;
-  if (!pattern.test(text)) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+  const pattern = /^version = "([^"]*)"/m;
+  const match = text.match(pattern);
+  if (!match) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+
+  if (match[1] === version) {
+    console.log(`skipped ${relPath} (already ${version})`);
+    return false;
+  }
   fs.writeFileSync(file, text.replace(pattern, `version = "${version}"`));
+  console.log(`updated ${relPath}`);
+  return true;
 }
 
 async function confirm(question) {
@@ -85,40 +98,43 @@ async function main() {
     usageAndExit('Working tree is not clean. Commit or stash first.');
   }
 
-  if (git(['tag', '--list', tag])) {
-    usageAndExit(`Tag ${tag} already exists.`);
-  }
-
   git(['fetch', 'origin', 'main']);
   if (git(['rev-parse', 'HEAD']) !== git(['rev-parse', 'origin/main'])) {
     usageAndExit('main is not up to date with origin/main. Pull first.');
   }
 
-  if (version === currentVersion('package.json')) {
-    // Already there — most likely tagging a first release. Nothing to bump
-    // or commit; just tag what's already on HEAD.
-    git(['tag', tag]);
-    console.log(`\nAlready at ${version} — tagged ${tag} on the current commit, no bump needed.`);
-  } else {
-    bumpJsonVersion('package.json', version);
-    bumpJsonVersion('src-tauri/tauri.conf.json', version);
-    bumpCargoVersion('src-tauri/Cargo.toml', version);
+  const changed = [];
+  if (syncJsonVersion('package.json', version)) changed.push('package.json');
+  if (syncJsonVersion('src-tauri/tauri.conf.json', version)) changed.push('src-tauri/tauri.conf.json');
+  if (syncCargoVersion('src-tauri/Cargo.toml', version)) changed.push('src-tauri/Cargo.toml');
 
+  if (changed.includes('src-tauri/Cargo.toml')) {
     // Regenerates just this package's version line in Cargo.lock — nothing
-    // else in it — so the bump commit doesn't leave the lockfile stale.
+    // else in it.
     execFileSync('cargo', ['check', '--manifest-path', 'src-tauri/Cargo.toml', '--quiet'], {
       cwd: repoRoot,
       stdio: 'inherit',
     });
-
-    git(['add', 'package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock']);
-    git(['commit', '-m', `Bump version to ${version}`]);
-    git(['tag', tag]);
-
-    console.log(`\nTagged ${tag} on top of a new "Bump version to ${version}" commit.`);
+    changed.push('src-tauri/Cargo.lock');
+    console.log('updated src-tauri/Cargo.lock');
   }
 
-  if (await confirm(`Push main and ${tag} to origin now? This starts the release build.`)) {
+  if (changed.length) {
+    git(['add', ...changed]);
+    git(['commit', '-m', `Bump version to ${version}`]);
+    console.log(`committed: Bump version to ${version}`);
+  } else {
+    console.log('skipped commit (nothing changed)');
+  }
+
+  if (git(['tag', '--list', tag])) {
+    console.log(`skipped git tag (already ${tag})`);
+  } else {
+    git(['tag', tag]);
+    console.log(`created git tag ${tag}`);
+  }
+
+  if (await confirm(`\nPush main and ${tag} to origin now? This starts the release build.`)) {
     git(['push', 'origin', 'main', tag]);
     console.log(`Pushed. Watch the build under Actions, then publish the draft release once it's done.`);
   } else {
