@@ -27,12 +27,23 @@ function git(args) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
 }
 
+function currentVersion(relPath) {
+  const text = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
+  const match = text.match(/"version":\s*"([^"]*)"/);
+  if (!match) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+  return match[1];
+}
+
+// Whether the pattern matched — not whether the file's content changed — is
+// what says a field was found. Those are the same thing right up until the
+// version being set matches the one already there, which a first release
+// tagging an untouched 0.1.0 does on purpose.
 function bumpJsonVersion(relPath, version) {
   const file = path.join(repoRoot, relPath);
   const text = fs.readFileSync(file, 'utf8');
-  const next = text.replace(/"version":\s*"[^"]*"/, `"version": "${version}"`);
-  if (next === text) usageAndExit(`Could not find a "version" field in ${relPath}.`);
-  fs.writeFileSync(file, next);
+  const pattern = /"version":\s*"[^"]*"/;
+  if (!pattern.test(text)) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+  fs.writeFileSync(file, text.replace(pattern, `"version": "${version}"`));
 }
 
 function bumpCargoVersion(relPath, version) {
@@ -41,9 +52,9 @@ function bumpCargoVersion(relPath, version) {
   // Anchored so this only ever touches the [package] version, never a
   // dependency's — those are written as `name = { version = "...", ... }`
   // on one line, not a standalone `version = "..."` line.
-  const next = text.replace(/^version = "[^"]*"/m, `version = "${version}"`);
-  if (next === text) usageAndExit(`Could not find a "version" field in ${relPath}.`);
-  fs.writeFileSync(file, next);
+  const pattern = /^version = "[^"]*"/m;
+  if (!pattern.test(text)) usageAndExit(`Could not find a "version" field in ${relPath}.`);
+  fs.writeFileSync(file, text.replace(pattern, `version = "${version}"`));
 }
 
 async function confirm(question) {
@@ -83,22 +94,29 @@ async function main() {
     usageAndExit('main is not up to date with origin/main. Pull first.');
   }
 
-  bumpJsonVersion('package.json', version);
-  bumpJsonVersion('src-tauri/tauri.conf.json', version);
-  bumpCargoVersion('src-tauri/Cargo.toml', version);
+  if (version === currentVersion('package.json')) {
+    // Already there — most likely tagging a first release. Nothing to bump
+    // or commit; just tag what's already on HEAD.
+    git(['tag', tag]);
+    console.log(`\nAlready at ${version} — tagged ${tag} on the current commit, no bump needed.`);
+  } else {
+    bumpJsonVersion('package.json', version);
+    bumpJsonVersion('src-tauri/tauri.conf.json', version);
+    bumpCargoVersion('src-tauri/Cargo.toml', version);
 
-  // Regenerates just this package's version line in Cargo.lock — nothing
-  // else in it — so the bump commit doesn't leave the lockfile stale.
-  execFileSync('cargo', ['check', '--manifest-path', 'src-tauri/Cargo.toml', '--quiet'], {
-    cwd: repoRoot,
-    stdio: 'inherit',
-  });
+    // Regenerates just this package's version line in Cargo.lock — nothing
+    // else in it — so the bump commit doesn't leave the lockfile stale.
+    execFileSync('cargo', ['check', '--manifest-path', 'src-tauri/Cargo.toml', '--quiet'], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    });
 
-  git(['add', 'package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock']);
-  git(['commit', '-m', `Bump version to ${version}`]);
-  git(['tag', tag]);
+    git(['add', 'package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock']);
+    git(['commit', '-m', `Bump version to ${version}`]);
+    git(['tag', tag]);
 
-  console.log(`\nTagged ${tag} on top of a new "Bump version to ${version}" commit.`);
+    console.log(`\nTagged ${tag} on top of a new "Bump version to ${version}" commit.`);
+  }
 
   if (await confirm(`Push main and ${tag} to origin now? This starts the release build.`)) {
     git(['push', 'origin', 'main', tag]);
