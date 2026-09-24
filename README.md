@@ -173,3 +173,15 @@ npm run screenshot -- local
 npm run screenshot -- youtube
 ```
 
+### Cutting a release
+
+Pushing a tag matching `v*` (e.g. `v0.2.0`) runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds an AppImage and a `.deb` on Linux and an NSIS `.exe` installer on Windows, then attaches all three to a **draft** GitHub Release for that tag. Nothing goes live on its own — review the draft and publish it by hand once the builds look right.
+
+A plain push to `main` builds nothing; only a tag does.
+
+```bash
+npm run release -- 0.2.0
+```
+
+Bumps the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commits that, tags it, and — after asking for confirmation — pushes both. Refuses to run from a dirty tree, a branch other than `main`, or a `main` that's behind `origin/main`.
+
