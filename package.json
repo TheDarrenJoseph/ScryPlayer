@@ -12,7 +12,8 @@
     "test:watch": "node --test --watch",
     "test:coverage": "node --test --experimental-test-coverage",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "test:all": "npm test && npm run test:rust"
+    "test:all": "npm test && npm run test:rust",
+    "screenshot": "node scripts/update-screenshot.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",

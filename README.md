@@ -24,6 +24,16 @@ This player supports two sources:
 ![Embedded YouTube player example](images/example_youtube_screenshot.png)
 ![Local music player example](images/example_local_screenshot.png)
 
+Get the running app (`npm run dev`) into the state you want shown, then
+refresh one of the above with:
+
+```bash
+npm run screenshot -- local
+npm run screenshot -- youtube
+```
+
+Linux (X11/XWayland) and macOS only — see `scripts/update-screenshot.js`.
+
 ## How to use
 
 ### Requirements
