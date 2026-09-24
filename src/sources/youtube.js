@@ -47,3 +47,34 @@ export function parseYouTube(input) {
 export function thumbnailFor(videoId) {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
 }
+
+/**
+ * The real title and channel name for a video, via YouTube's oEmbed endpoint.
+ * No API key needed, and it reflects back whatever origin asks — the app CSP
+ * allows the request under `connect-src`.
+ *
+ * This exists so a queued video shows its actual name right away, instead of
+ * the bare id it starts with. Failure of any kind (offline, a deleted video,
+ * an owner who disabled embedding) resolves to `null` rather than throwing,
+ * since the caller has a perfectly good placeholder to fall back to.
+ *
+ * @returns {Promise<{ title: string, artist: string | null } | null>}
+ */
+export async function fetchVideoInfo(videoId) {
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
+
+  try {
+    const res = await fetch(oembedUrl);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const title = typeof data.title === 'string' ? data.title.trim() : '';
+    if (!title) return null;
+
+    const artist = typeof data.author_name === 'string' ? data.author_name.trim() : '';
+    return { title, artist: artist || null };
+  } catch {
+    return null;
+  }
+}

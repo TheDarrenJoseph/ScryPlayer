@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 
-import { parseYouTube, thumbnailFor } from '../src/sources/youtube.js';
+import { fetchVideoInfo, parseYouTube, thumbnailFor } from '../src/sources/youtube.js';
 
 const ID = 'dQw4w9WgXcQ';
 
@@ -90,5 +90,72 @@ describe('parseYouTube', () => {
 describe('thumbnailFor', () => {
   it('points at the host the CSP allows', () => {
     assert.equal(thumbnailFor(ID), `https://i.ytimg.com/vi/${ID}/mqdefault.jpg`);
+  });
+});
+
+describe('fetchVideoInfo', () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const jsonResponse = (body, ok = true) => ({ ok, json: async () => body });
+
+  it('asks oEmbed for the watch URL, JSON form', async () => {
+    let requested;
+    globalThis.fetch = async (url) => {
+      requested = url;
+      return jsonResponse({ title: 'A Song', author_name: 'A Channel' });
+    };
+
+    await fetchVideoInfo(ID);
+
+    assert.equal(
+      requested,
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${ID}`)}&format=json`,
+    );
+  });
+
+  it('resolves the title and channel name', async () => {
+    globalThis.fetch = async () => jsonResponse({ title: '  A Song  ', author_name: '  A Channel  ' });
+
+    assert.deepEqual(await fetchVideoInfo(ID), { title: 'A Song', artist: 'A Channel' });
+  });
+
+  it('resolves a null artist when oEmbed leaves it out', async () => {
+    globalThis.fetch = async () => jsonResponse({ title: 'A Song' });
+
+    assert.deepEqual(await fetchVideoInfo(ID), { title: 'A Song', artist: null });
+  });
+
+  it('resolves null on a non-OK response', async () => {
+    globalThis.fetch = async () => jsonResponse({ title: 'A Song' }, false);
+
+    assert.equal(await fetchVideoInfo(ID), null);
+  });
+
+  it('resolves null when there is no title to give', async () => {
+    globalThis.fetch = async () => jsonResponse({});
+
+    assert.equal(await fetchVideoInfo(ID), null);
+  });
+
+  it('resolves null rather than throwing when the network fails', async () => {
+    globalThis.fetch = async () => {
+      throw new Error('offline');
+    };
+
+    assert.equal(await fetchVideoInfo(ID), null);
+  });
+
+  it('resolves null on a response that is not JSON', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => {
+        throw new SyntaxError('not json');
+      },
+    });
+
+    assert.equal(await fetchVideoInfo(ID), null);
   });
 });

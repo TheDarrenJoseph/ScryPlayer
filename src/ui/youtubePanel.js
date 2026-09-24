@@ -1,4 +1,4 @@
-import { parseYouTube } from '../sources/youtube.js';
+import { parseYouTube, fetchVideoInfo as defaultFetchVideoInfo } from '../sources/youtube.js';
 import { renderQueue } from './queueList.js';
 
 const $ = (id) => document.getElementById(id);
@@ -6,11 +6,13 @@ const $ = (id) => document.getElementById(id);
 /**
  * The YouTube source: a link box above the embedded player, its queue beside it.
  *
- * Titles are unknown at the moment a link is pasted — the queue shows the video
- * id until the player reports back, at which point the adapter emits `meta` and
- * the row rewrites itself.
+ * The real title is unknown at the moment a link is pasted, so the row shows
+ * the video id and a background oEmbed lookup swaps in the real name as soon
+ * as it lands. The player is a second, independent source of the same detail
+ * (it emits `meta` once the video actually loads) — whichever arrives first
+ * wins, and the other is a no-op against an already-real title.
  */
-export function createYouTubePanel(controller, queue, { setStatus }) {
+export function createYouTubePanel(controller, queue, { setStatus, fetchVideoInfo = defaultFetchVideoInfo }) {
   const form = $('yt-form');
   const input = $('yt-input');
   const frame = document.querySelector('.video-frame');
@@ -40,17 +42,30 @@ export function createYouTubePanel(controller, queue, { setStatus }) {
     }
 
     const wasEmpty = queue.length === 0;
-    queue.add([
-      {
-        source: 'youtube',
-        videoId: parsed.videoId,
-        // A placeholder until the player tells us the real title.
-        title: parsed.videoId,
-        artist: null,
-        duration: null,
-      },
-    ]);
+    const track = {
+      source: 'youtube',
+      videoId: parsed.videoId,
+      // A placeholder until the oEmbed lookup below, or the player itself,
+      // reports the real title.
+      title: parsed.videoId,
+      artist: null,
+      duration: null,
+    };
+    queue.add([track]);
     input.value = '';
+
+    fetchVideoInfo(parsed.videoId).then((info) => {
+      if (!info) return;
+      // Someone else already filled this in — the player, most likely,
+      // since it started loading the moment this was the first track added.
+      if (track.title !== parsed.videoId) return;
+      // Removed from the queue before the lookup came back.
+      if (!queue.items.includes(track)) return;
+
+      track.title = info.title;
+      if (info.artist) track.artist = info.artist;
+      queue.emit('change', queue);
+    });
 
     if (parsed.playlistId) {
       setStatus('Added the video. Whole playlists are not supported yet.');

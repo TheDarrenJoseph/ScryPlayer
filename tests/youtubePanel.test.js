@@ -29,6 +29,8 @@ let controller;
 let adapter;
 let queue;
 let status;
+/** Swap this per-test to control what the oEmbed lookup hands back. */
+let fetchVideoInfoImpl;
 
 /** Build the panel over a real controller and queue. */
 function setup() {
@@ -38,10 +40,13 @@ function setup() {
   adapter = new FakeAdapter();
   queue = new Queue('youtube');
   status = [];
+  // Off by default — most tests care about the adapter's own meta, not this.
+  fetchVideoInfoImpl = async () => null;
 
   controller.register('youtube', adapter, queue);
   createYouTubePanel(controller, queue, {
     setStatus: (message, isError = false) => status.push({ message, isError }),
+    fetchVideoInfo: (videoId) => fetchVideoInfoImpl(videoId),
   });
 
   return controller.setActive('youtube');
@@ -83,6 +88,42 @@ describe('createYouTubePanel', () => {
         'Never Gonna Give You Up',
         'the row rewrites itself',
       );
+    });
+
+    it('fetches the real title in the background, ahead of playback', async () => {
+      fetchVideoInfoImpl = async () => ({ title: 'Never Gonna Give You Up', artist: 'Rick Astley' });
+
+      await add(ID);
+
+      assert.equal(rows()[0].querySelector('.row__name').textContent, 'Never Gonna Give You Up');
+      assert.equal(queue.items[0].artist, 'Rick Astley');
+    });
+
+    it('leaves a title the player already reported alone', async () => {
+      let resolveInfo;
+      fetchVideoInfoImpl = () => new Promise((r) => (resolveInfo = r));
+
+      await add(ID);
+      adapter.describe({ title: 'From the player' });
+      resolveInfo({ title: 'From oEmbed', artist: null });
+      await new Promise((r) => setImmediate(r));
+
+      assert.equal(rows()[0].querySelector('.row__name').textContent, 'From the player');
+    });
+
+    it('does nothing if the track is gone before the lookup returns', async () => {
+      let resolveInfo;
+      fetchVideoInfoImpl = () => new Promise((r) => (resolveInfo = r));
+
+      await add(ID);
+      click(rows()[0].querySelector('button'));
+      await new Promise((r) => setImmediate(r));
+      assert.equal(queue.length, 0, 'removed before the lookup settles');
+
+      resolveInfo({ title: 'Too late', artist: null });
+      await new Promise((r) => setImmediate(r));
+
+      assert.equal(queue.length, 0, 'the lookup did not resurrect it');
     });
 
     it('starts playing the first video, but only joins the queue after that', async () => {
