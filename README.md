@@ -24,16 +24,6 @@ This player supports two sources:
 ![Embedded YouTube player example](images/example_youtube_screenshot.png)
 ![Local music player example](images/example_local_screenshot.png)
 
-Get the running app (`npm run dev`) into the state you want shown, then
-refresh one of the above with:
-
-```bash
-npm run screenshot -- local
-npm run screenshot -- youtube
-```
-
-Linux (X11/XWayland) and macOS only — see `scripts/update-screenshot.js`.
-
 ## How to use
 
 ### Requirements
@@ -166,3 +156,20 @@ All user-supplied text (filenames, tags, YouTube titles) reaches the DOM via
   unplayable rather than hidden.
 - Restored sessions cap at 500 tracks per queue, the practical `localStorage`
   limit.
+
+## Dev Notes
+
+### Updating local screenshots
+
+Don't forget to install `x11-utils imagemagick` if needed
+
+Get the running app into the state you want shown, then refresh one of the
+above with:
+
+```bash
+GDK_BACKEND=x11 npm run dev
+# in another terminal, once the app window is open and showing what you want:
+npm run screenshot -- local
+npm run screenshot -- youtube
+```
+

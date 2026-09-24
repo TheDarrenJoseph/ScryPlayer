@@ -11,7 +11,6 @@
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -78,6 +77,7 @@ function captureLinux(outFile, windowIdOverride) {
   try {
     execFileSync('import', ['-window', windowId, outFile], { stdio: ['ignore', 'ignore', 'pipe'] });
   } catch (err) {
+    cleanUp(outFile);
     usageAndExit(
       `\`import -window ${windowId}\` failed: ${err.stderr?.toString().trim() || err.message}\n` +
         'The window may have closed, moved off a capturable surface, or the compositor is blocking the grab.'
@@ -105,7 +105,16 @@ function captureMac(outFile) {
   try {
     execFileSync('screencapture', ['-R', `${x},${y},${w},${h}`, '-x', outFile], { stdio: ['ignore', 'ignore', 'pipe'] });
   } catch (err) {
+    cleanUp(outFile);
     usageAndExit(`\`screencapture\` failed: ${err.stderr?.toString().trim() || err.message}`);
+  }
+}
+
+function cleanUp(file) {
+  try {
+    fs.unlinkSync(file);
+  } catch {
+    // Nothing was written — fine.
   }
 }
 
@@ -121,7 +130,12 @@ function main() {
 
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const outFile = path.join(repoRoot, 'images', TARGETS[target]);
-  const tmpFile = path.join(os.tmpdir(), `scryplayer-screenshot-${Date.now()}.png`);
+  // Written next to `outFile` (not os.tmpdir()) so the final rename stays on
+  // one filesystem — tmpdir is often a separate mount (e.g. tmpfs), and
+  // rename() across devices fails. Keeping ".png" as the actual extension
+  // matters: ImageMagick picks its output format from the filename suffix,
+  // so a name ending in anything else silently writes PostScript instead.
+  const tmpFile = path.join(repoRoot, 'images', `.tmp-${process.pid}-${TARGETS[target]}`);
 
   if (process.platform === 'linux') {
     captureLinux(tmpFile, windowIdOverride);
@@ -133,7 +147,7 @@ function main() {
 
   const stats = fs.statSync(tmpFile);
   if (stats.size < 1024) {
-    fs.unlinkSync(tmpFile);
+    cleanUp(tmpFile);
     usageAndExit(
       'Capture looked empty (under 1KB) — the window probably was not visible. Aborting without touching the README image.'
     );
