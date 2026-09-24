@@ -805,16 +805,12 @@ svg {
   width: 32px;
   height: 32px;
   padding: 7px;
-  border-radius: 50%;
   color: var(--moon-dim);
-  transition:
-    color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+  transition: color var(--fast) var(--ease);
 }
 
 .iconbtn:hover {
   color: var(--moon);
-  background: var(--hover);
 }
 
 .iconbtn[aria-pressed='true'],
@@ -829,7 +825,6 @@ svg {
 }
 
 .iconbtn:disabled:hover {
-  background: none;
   color: var(--moon-dim);
 }
 
@@ -866,12 +861,17 @@ svg {
   stroke: none;
 }
 
-/* Shuffle is the only control that leaves the moonlight palette when on.
-   An id, so it outranks the shared `[aria-pressed='true']` glow above and
-   keeps its colour through hover. */
+/* Shuffle and repeat leave the moonlight palette when on, each its own
+   colour. An id, so it outranks the shared `.is-on` / `[aria-pressed='true']`
+   glow above and keeps its colour through hover. */
 #btn-shuffle[aria-pressed='true'] {
   color: var(--chance-soft);
   filter: drop-shadow(0 0 7px var(--chance-halo));
+}
+
+#btn-repeat.is-on {
+  color: var(--repeat-soft);
+  filter: drop-shadow(0 0 7px var(--repeat-halo));
 }
 
 .playbtn {

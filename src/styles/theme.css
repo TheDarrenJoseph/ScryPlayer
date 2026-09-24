@@ -33,8 +33,12 @@
      so a glance at the transport says whether the order is being meddled
      with. Kept below the moon in brightness, like everything else. */
   --chance: #c07ef0;
-  --chance-soft: #e3bcff;
-  --chance-halo: rgba(192, 126, 240, 0.7);
+  --chance-soft: #c65cff;
+  --chance-halo: rgba(176, 38, 255, 0.85);
+
+  /* Repeat — gold when on, distinct from the shared moonlight glow. */
+  --repeat-soft: #ffb300;
+  --repeat-halo: rgba(255, 140, 0, 0.9);
 
   /* Glass panels */
   --pane-bg: rgba(12, 18, 31, 0.58);
