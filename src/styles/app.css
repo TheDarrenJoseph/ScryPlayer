@@ -725,7 +725,7 @@ svg {
 
 .transport {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 2fr) minmax(0, auto);
   align-items: center;
   gap: 20px;
   min-height: var(--transport-h);
@@ -954,10 +954,12 @@ svg {
   gap: 8px;
   justify-content: flex-end;
   min-width: 0;
+  padding-right: 14px;
 }
 
-.vol__bar {
-  width: 96px;
+.range.range--vol {
+  flex: none;
+  width: 110px;
 }
 
 .vol__cross {
@@ -1039,11 +1041,6 @@ svg {
 .range:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-.vol__bar.range {
-  flex: none;
-  width: 96px;
 }
 
 /* ── Narrow windows ────────────────────────────────────── */
