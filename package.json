@@ -1,7 +1,7 @@
 {
   "name": "scry-player",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "A local media player for dark rooms — local files and YouTube, under one moon.",
   "scripts": {
