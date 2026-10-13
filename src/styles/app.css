@@ -266,6 +266,12 @@ svg {
   min-height: 0;
 }
 
+/* A disc has nothing to browse — just its queue — so it gets the full width
+   rather than sitting beside an empty pane. */
+.panel--cd {
+  grid-template-columns: 1fr;
+}
+
 .panel[hidden] {
   display: none;
 }
@@ -332,12 +338,6 @@ svg {
 .pane__actions {
   display: flex;
   gap: 6px;
-}
-
-.pane__hint {
-  padding: 16px;
-  font-size: 12.5px;
-  color: var(--moon-faint);
 }
 
 /* ── Buttons ───────────────────────────────────────────── */

@@ -157,20 +157,13 @@
           aria-labelledby="tab-cd"
           hidden
         >
-          <div class="pane pane--browser">
-            <div class="pane__head">
-              <h2 class="pane__title">Disc</h2>
-              <div class="pane__actions">
-                <button class="btn btn--ghost" id="btn-scan-cd">Scan disc…</button>
-              </div>
-            </div>
-            <p class="pane__hint">Insert an audio CD, then scan it to list its tracks.</p>
-          </div>
-
           <div class="pane pane--queue">
             <div class="pane__head">
               <h2 class="pane__title">Queue <span class="count" id="count-cd">0</span></h2>
-              <button class="btn btn--ghost btn--sm btn-clear-playlist" id="btn-clear-cd" data-source="cd">Clear</button>
+              <div class="pane__actions">
+                <button class="btn btn--ghost" id="btn-scan-cd">Scan disc…</button>
+                <button class="btn btn--ghost btn--sm btn-clear-playlist" id="btn-clear-cd" data-source="cd">Clear</button>
+              </div>
             </div>
             <ol class="queue" id="queue-cd"></ol>
           </div>
