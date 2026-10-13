@@ -120,6 +120,18 @@ describe('createCdPanel', () => {
       assert.ok(!queue.items.some((t) => t.title === 'Stale track'));
     });
 
+    it('stops playback before replacing the queue, in case the disc was swapped', async () => {
+      await scan();
+      await controller.playAt(0);
+      assert.equal(controller.state.playing, true, 'sanity check: it was playing');
+
+      bridge.handlers.scan_cd = () => [cdTrack({ title: 'A different disc entirely' })];
+      await scan();
+
+      assert.equal(controller.state.playing, false, 'the old track is not left streaming');
+      assert.equal(queue.items[0].title, 'A different disc entirely');
+    });
+
     it('reports how many tracks were found', async () => {
       await scan();
 

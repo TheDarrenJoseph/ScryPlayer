@@ -63,7 +63,11 @@ export function createCdPanel(controller, queue, { setStatus, settings }) {
         return;
       }
 
-      queue.clear();
+      // Not a bare `queue.clear()`: a rescan can happen mid-playback (the
+      // disc was swapped), and the active track's URL encodes the *old*
+      // disc's sector range — it must stop rather than keep streaming
+      // whatever now happens to sit at those sectors on the new one.
+      controller.clearQueue('cd');
       const queued = tracks.map((t) => ({ ...t, source: 'cd' }));
       queue.add(queued);
       setStatus(`Found ${tracks.length} track${tracks.length === 1 ? '' : 's'}.`);
