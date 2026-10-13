@@ -52,11 +52,7 @@ pub fn list_drives() -> Vec<DriveInfo> {
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !name.starts_with("sr") {
-                return None;
-            }
-            let path = format!("/dev/{name}");
-            Some(DriveInfo { id: path.clone(), label: path })
+            name.starts_with("sr").then(|| DriveInfo { id: format!("/dev/{name}") })
         })
         .collect();
 

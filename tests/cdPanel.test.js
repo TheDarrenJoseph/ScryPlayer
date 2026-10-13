@@ -40,7 +40,7 @@ before(async () => {
   ({ createCdPanel } = await import('../src/ui/cdPanel.js'));
 });
 
-const DRIVE = { id: '/dev/sr0', label: '/dev/sr0' };
+const DRIVE = { id: '/dev/sr0' };
 
 const cdTrack = (over = {}) => ({
   drive: '/dev/sr0',
@@ -48,10 +48,7 @@ const cdTrack = (over = {}) => ({
   startLba: 0,
   endLba: 21_000,
   title: 'Track 1',
-  artist: null,
-  album: null,
   duration: 280,
-  playable: true,
   ...over,
 });
 
@@ -188,7 +185,7 @@ describe('createCdPanel', () => {
       await scan();
 
       assert.equal(queue.items[0].title, 'Track 1');
-      assert.equal(queue.items[0].artist, null);
+      assert.equal(queue.items[0].artist, undefined, 'no artist arrives without a match');
     });
 
     it('never asks GnuDB when the setting is off', async () => {

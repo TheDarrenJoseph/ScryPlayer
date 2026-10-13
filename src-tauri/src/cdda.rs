@@ -23,7 +23,6 @@ pub const SECTORS_PER_SECOND: u32 = 75;
 #[serde(rename_all = "camelCase")]
 pub struct DriveInfo {
     pub id: String,
-    pub label: String,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]

@@ -174,9 +174,17 @@ fn media_server_port(app: AppHandle) -> u16 {
     app.state::<MediaServer>().port
 }
 
-/// A CD track as the frontend queue understands tracks: no real tags exist
-/// on a disc, so title is just a TOC-derived placeholder — a MusicBrainz-style
-/// disc lookup for real metadata would be a separate feature.
+/// A CD track as the frontend queue understands tracks.
+///
+/// No real tags exist on a disc, so `title` is just a TOC-derived
+/// placeholder; artist and album arrive later, if at all, from
+/// `lookup_cd_metadata` — never from here, so they have no place in this
+/// shape. Every field that *is* here is one the TOC genuinely gives a real
+/// value for, unlike `media::Track`'s shape this otherwise mirrors: a CD
+/// track is never `playable: false` (there's no decode failure to have),
+/// so that field is gone too, and `duration` is a plain `f64` rather than
+/// `Option<f64>` since the TOC can't fail to supply it the way a missing
+/// tag can for a local file.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CdTrackDto {
@@ -185,10 +193,7 @@ struct CdTrackDto {
     start_lba: u32,
     end_lba: u32,
     title: String,
-    artist: Option<String>,
-    album: Option<String>,
-    duration: Option<f64>,
-    playable: bool,
+    duration: f64,
 }
 
 /// CD drives currently visible to the OS (not necessarily holding a disc).
@@ -210,10 +215,7 @@ fn scan_cd(drive: String) -> Result<Vec<CdTrackDto>, String> {
             start_lba: t.start_lba,
             end_lba: t.end_lba,
             title: format!("Track {}", t.track_no),
-            artist: None,
-            album: None,
-            duration: Some(t.duration),
-            playable: true,
+            duration: t.duration,
         })
         .collect())
 }
