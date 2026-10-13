@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.3",
   "type": "module",
-  "description": "A local media player for dark rooms — local files and YouTube, under one moon.",
+  "description": "A media player for local files, audio CDs, and YouTube",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
@@ -14,7 +14,7 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:all": "npm test && npm run test:rust",
     "screenshot": "node scripts/update-screenshot.js",
-    "release": "node scripts/tag-release.js"
+    "release": "bash scripts/tag-release.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
