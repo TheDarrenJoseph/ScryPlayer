@@ -1,9 +1,9 @@
 //! GnuDB (classic CDDBP protocol) disc-metadata lookup.
 //!
-//! Deliberately free of `tauri` types, same as `cdda.rs`/`media.rs`: the disc
-//! ID checksum and response parsing are pure functions, unit-testable without
-//! a network. Only `lookup` touches the network, tying together one
-//! handshake and two commands (`query` then `read`) over a single connection.
+//! The disc ID checksum and response parsing are pure functions,
+//! unit-testable without a network. Only `lookup` touches the network,
+//! tying together one handshake and two commands (`query` then `read`)
+//! over a single connection.
 //!
 //! A Red Book audio CD carries no text metadata at all — this is purely a
 //! lookup against GnuDB's database, keyed by a checksum of the disc's TOC.

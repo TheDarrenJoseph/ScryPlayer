@@ -1,12 +1,11 @@
 //! Audio CD table-of-contents and raw-sector reading.
 //!
-//! Deliberately free of `tauri` types, same as `media.rs`, so the SCSI
-//! command-building, TOC-parsing and WAV-header logic here is unit testable
-//! without a drive. Only `send_scsi`, dispatched to a platform module below,
-//! actually touches the OS — on Linux via `cdda_linux`; any other target
-//! gets a stub that reports the platform isn't supported yet, so the crate
-//! always compiles and a new platform module is the only thing a later port
-//! needs to add.
+//! The SCSI command-building, TOC-parsing and WAV-header logic here is unit
+//! testable without a drive. Only `send_scsi`, dispatched to a platform
+//! module below, actually touches the OS — on Linux via `cdda_linux`; any
+//! other target gets a stub that reports the platform isn't supported yet,
+//! so the crate always compiles and a new platform module is the only thing
+//! a later port needs to add.
 //!
 //! The commands themselves (`READ TOC/PMA/ATIP`, `READ CD`) are standard SCSI
 //! MMC opcodes — the same bytes regardless of OS. Only the transport that
