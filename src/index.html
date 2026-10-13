@@ -51,6 +51,21 @@
             </svg>
             <span>YouTube</span>
           </button>
+          <button
+            class="picker__opt"
+            id="tab-cd"
+            role="tab"
+            data-source="cd"
+            aria-controls="panel-cd"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="2.4" />
+            </svg>
+            <span>Audio CD</span>
+          </button>
         </nav>
 
         <div class="topbar__end">
@@ -131,6 +146,33 @@
               <button class="btn btn--ghost btn--sm btn-clear-playlist" id="btn-clear-youtube" data-source="youtube">Clear</button>
             </div>
             <ol class="queue" id="queue-youtube"></ol>
+          </div>
+        </section>
+
+        <!-- ───────────── Audio CD ───────────── -->
+        <section
+          class="panel panel--cd"
+          id="panel-cd"
+          role="tabpanel"
+          aria-labelledby="tab-cd"
+          hidden
+        >
+          <div class="pane pane--browser">
+            <div class="pane__head">
+              <h2 class="pane__title">Disc</h2>
+              <div class="pane__actions">
+                <button class="btn btn--ghost" id="btn-scan-cd">Scan disc…</button>
+              </div>
+            </div>
+            <p class="pane__hint">Insert an audio CD, then scan it to list its tracks.</p>
+          </div>
+
+          <div class="pane pane--queue">
+            <div class="pane__head">
+              <h2 class="pane__title">Queue <span class="count" id="count-cd">0</span></h2>
+              <button class="btn btn--ghost btn--sm btn-clear-playlist" id="btn-clear-cd" data-source="cd">Clear</button>
+            </div>
+            <ol class="queue" id="queue-cd"></ol>
           </div>
         </section>
       </main>

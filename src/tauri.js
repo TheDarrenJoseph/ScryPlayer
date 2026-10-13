@@ -40,3 +40,27 @@ export const mediaServerPort = () => invoke('media_server_port');
 // File dialogs are opened from Rust, so the frontend needs no dialog plugin.
 export const pickFolder = (startAt) => invoke('pick_folder', { startAt: startAt ?? null });
 export const pickFiles = (startAt) => invoke('pick_files', { startAt: startAt ?? null });
+
+/**
+ * CD drives currently visible to the OS (not necessarily holding a disc).
+ *
+ * @returns {Promise<Array<{ id: string, label: string }>>}
+ */
+export const listCdDrives = () => invoke('list_cd_drives');
+
+/**
+ * Read `drive`'s table of contents and report its audio tracks.
+ *
+ * @returns {Promise<object[]>}
+ */
+export const scanCd = (drive) => invoke('scan_cd', { drive });
+
+/**
+ * A loopback URL the media element can stream this CD track from — the same
+ * idea as `mediaUrl`, just built from a drive id and the track's sector
+ * range (from `scanCd`) instead of a filesystem path.
+ *
+ * @returns {Promise<string>}
+ */
+export const cdTrackUrl = (drive, startLba, endLba) =>
+  invoke('cd_track_url', { drive, startLba, endLba });

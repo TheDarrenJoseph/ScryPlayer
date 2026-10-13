@@ -1,3 +1,6 @@
+mod cdda;
+#[cfg(target_os = "linux")]
+mod cdda_linux;
 mod media;
 mod server;
 
@@ -10,6 +13,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
+use cdda::DriveInfo;
 use media::{DirListing, Track};
 use server::MediaServer;
 
@@ -168,6 +172,66 @@ fn media_server_port(app: AppHandle) -> u16 {
     app.state::<MediaServer>().port
 }
 
+/// A CD track as the frontend queue understands tracks: no real tags exist
+/// on a disc, so title is just a TOC-derived placeholder — a MusicBrainz-style
+/// disc lookup for real metadata would be a separate feature.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CdTrackDto {
+    drive: String,
+    track_no: u32,
+    start_lba: u32,
+    end_lba: u32,
+    title: String,
+    artist: Option<String>,
+    album: Option<String>,
+    duration: Option<f64>,
+    playable: bool,
+}
+
+/// CD drives currently visible to the OS (not necessarily holding a disc).
+#[tauri::command]
+fn list_cd_drives() -> Vec<DriveInfo> {
+    cdda::list_drives()
+}
+
+/// Read `drive`'s table of contents and report its audio tracks.
+#[tauri::command]
+fn scan_cd(drive: String) -> Result<Vec<CdTrackDto>, String> {
+    let toc = cdda::read_toc(&drive)?;
+    Ok(toc
+        .tracks
+        .into_iter()
+        .map(|t| CdTrackDto {
+            drive: drive.clone(),
+            track_no: t.track_no,
+            start_lba: t.start_lba,
+            end_lba: t.end_lba,
+            title: format!("Track {}", t.track_no),
+            artist: None,
+            album: None,
+            duration: Some(t.duration),
+            playable: true,
+        })
+        .collect())
+}
+
+/// The loopback URL the media element should play this CD track from. Unlike
+/// `media_url` this needs no scope check — a CD track isn't a filesystem
+/// path, so there's nothing for `MediaScope` to gate.
+#[tauri::command]
+fn cd_track_url(app: AppHandle, drive: String, start_lba: u32, end_lba: u32) -> String {
+    let server = app.state::<MediaServer>();
+    format!(
+        "http://127.0.0.1:{}/cdda?token={}&drive={}&start={}&end={}",
+        server.port,
+        server.token,
+        utf8_percent_encode(&drive, NON_ALPHANUMERIC),
+        start_lba,
+        end_lba
+    )
+}
+
 /// Native folder picker.
 ///
 /// These commands are `async` on purpose: the blocking dialog helpers deadlock
@@ -226,6 +290,9 @@ pub fn run() {
             grant_paths,
             media_url,
             media_server_port,
+            list_cd_drives,
+            scan_cd,
+            cd_track_url,
             pick_folder,
             pick_files
         ])
