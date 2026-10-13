@@ -14,6 +14,9 @@ const $ = (id) => document.getElementById(id);
 export const DEFAULTS = {
   restoreSession: true,
   water: true,
+  // On by default: scanning a disc is already an explicit action, and all
+  // that leaves this machine is a checksum of the disc's track layout.
+  cddbLookup: true,
 };
 
 /** Read the saved settings, falling back per-field so a partial save is fine. */
@@ -27,7 +30,11 @@ export function loadSettings() {
 
   const pick = (key) => (typeof saved[key] === 'boolean' ? saved[key] : DEFAULTS[key]);
 
-  return { restoreSession: pick('restoreSession'), water: pick('water') };
+  return {
+    restoreSession: pick('restoreSession'),
+    water: pick('water'),
+    cddbLookup: pick('cddbLookup'),
+  };
 }
 
 function save(values) {
@@ -52,9 +59,11 @@ export function createSettings(values, { onChange, onForget }) {
   const note = $('settings-note');
   const restore = $('set-restore');
   const water = $('set-water');
+  const cddbLookup = $('set-cddb-lookup');
 
   restore.checked = values.restoreSession;
   water.checked = values.water;
+  cddbLookup.checked = values.cddbLookup;
 
   function update(key, on) {
     values[key] = on;
@@ -64,6 +73,7 @@ export function createSettings(values, { onChange, onForget }) {
 
   restore.addEventListener('change', () => update('restoreSession', restore.checked));
   water.addEventListener('change', () => update('water', water.checked));
+  cddbLookup.addEventListener('change', () => update('cddbLookup', cddbLookup.checked));
 
   $('btn-forget').addEventListener('click', () => {
     onForget();

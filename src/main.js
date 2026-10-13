@@ -68,7 +68,7 @@ function main() {
   createTransport(controller);
   const localPanel = createLocalPanel(controller, localQueue, { setStatus });
   createYouTubePanel(controller, youtubeQueue, { setStatus });
-  createCdPanel(controller, cdQueue, { setStatus });
+  createCdPanel(controller, cdQueue, { setStatus, settings });
 
   // Both panels clear the same way; each button names the queue it empties.
   for (const button of document.querySelectorAll('.btn-clear-playlist')) {

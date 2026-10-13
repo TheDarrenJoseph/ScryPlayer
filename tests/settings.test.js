@@ -55,38 +55,38 @@ beforeEach(() => {
 
 describe('loadSettings', () => {
   it('defaults to how the app behaved before the dialog existed', () => {
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
-    assert.deepEqual(DEFAULTS, { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
+    assert.deepEqual(DEFAULTS, { restoreSession: true, water: true, cddbLookup: true });
   });
 
   it('reads what was saved', () => {
     localStorage.setItem(KEY, JSON.stringify({ restoreSession: false, water: false }));
 
-    assert.deepEqual(loadSettings(), { restoreSession: false, water: false });
+    assert.deepEqual(loadSettings(), { restoreSession: false, water: false, cddbLookup: true });
   });
 
   it('fills in per field, so a partial save still loads', () => {
     localStorage.setItem(KEY, JSON.stringify({ water: false }));
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: false });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: false, cddbLookup: true });
   });
 
   it('ignores values of the wrong type', () => {
     localStorage.setItem(KEY, JSON.stringify({ restoreSession: 'yes please', water: 1 }));
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
   });
 
   it('falls back to the defaults when the saved value is unreadable', () => {
     localStorage.setItem(KEY, '{ not json');
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
   });
 
   it('survives a stored null', () => {
     localStorage.setItem(KEY, 'null');
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
   });
 });
 
@@ -143,10 +143,11 @@ describe('createSettings', () => {
 
   describe('the switches', () => {
     it('start from the values it was given', () => {
-      setup(JSON.stringify({ restoreSession: false, water: true }));
+      setup(JSON.stringify({ restoreSession: false, water: true, cddbLookup: false }));
 
       assert.equal($('set-restore').checked, false);
       assert.equal($('set-water').checked, true);
+      assert.equal($('set-cddb-lookup').checked, false);
     });
 
     it('report and persist a change', () => {
@@ -155,8 +156,8 @@ describe('createSettings', () => {
       toggle('set-water', false);
 
       assert.equal(values.water, false, 'the caller sees it through the object it passed');
-      assert.deepEqual(changes.at(-1), { restoreSession: true, water: false });
-      assert.deepEqual(loadSettings(), { restoreSession: true, water: false }, 'and it is saved');
+      assert.deepEqual(changes.at(-1), { restoreSession: true, water: false, cddbLookup: true });
+      assert.deepEqual(loadSettings(), { restoreSession: true, water: false, cddbLookup: true }, 'and it is saved');
     });
 
     it('keeps the two settings independent', () => {
@@ -164,8 +165,17 @@ describe('createSettings', () => {
 
       toggle('set-restore', false);
 
-      assert.deepEqual(values, { restoreSession: false, water: true });
+      assert.deepEqual(values, { restoreSession: false, water: true, cddbLookup: true });
       assert.equal($('set-water').checked, true);
+    });
+
+    it('persists the GnuDB lookup switch like the others', () => {
+      const { values } = setup();
+
+      toggle('set-cddb-lookup', false);
+
+      assert.deepEqual(values, { restoreSession: true, water: true, cddbLookup: false });
+      assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: false });
     });
 
     it('survives a reload', () => {
@@ -219,10 +229,10 @@ describe('createSettings', () => {
 
       click($('btn-forget'));
 
-      assert.deepEqual(values, { restoreSession: false, water: false });
+      assert.deepEqual(values, { restoreSession: false, water: false, cddbLookup: true });
       assert.deepEqual(
         loadSettings(),
-        { restoreSession: false, water: false },
+        { restoreSession: false, water: false, cddbLookup: true },
         'settings outlive the session they describe',
       );
     });

@@ -59,6 +59,7 @@ let controller;
 let adapter;
 let queue;
 let status;
+let settings;
 
 beforeEach(() => {
   document.body.innerHTML = MARKUP;
@@ -66,16 +67,19 @@ beforeEach(() => {
   bridge.handlers = {
     list_cd_drives: () => [DRIVE],
     scan_cd: () => [cdTrack(), cdTrack({ trackNo: 2, title: 'Track 2', startLba: 21_000, endLba: 45_000 })],
+    lookup_cd_metadata: () => null,
   };
 
   controller = new Controller();
   adapter = new FakeAdapter();
   queue = new Queue('cd');
   status = [];
+  settings = { cddbLookup: true };
 
   controller.register('cd', adapter, queue);
   createCdPanel(controller, queue, {
     setStatus: (message, isError = false) => status.push({ message, isError }),
+    settings,
   });
 
   return controller.setActive('cd');
@@ -147,6 +151,58 @@ describe('createCdPanel', () => {
 
       assert.deepEqual(status.at(-1), { message: 'tray is open', isError: true });
       assert.equal(queue.length, 0);
+    });
+  });
+
+  describe('GnuDB enrichment', () => {
+    it('patches titles, artist and album once GnuDB answers', async () => {
+      bridge.handlers.lookup_cd_metadata = () => ({
+        artist: 'Fleetwood Mac',
+        album: 'Rumours',
+        trackTitles: ['Second Hand News', 'Dreams'],
+      });
+
+      await scan();
+
+      assert.equal(queue.items[0].title, 'Second Hand News');
+      assert.equal(queue.items[1].title, 'Dreams');
+      assert.equal(queue.items[0].artist, 'Fleetwood Mac');
+      assert.equal(queue.items[0].album, 'Rumours');
+    });
+
+    it('leaves the TOC placeholders when GnuDB has no match', async () => {
+      bridge.handlers.lookup_cd_metadata = () => null;
+
+      await scan();
+
+      assert.equal(queue.items[0].title, 'Track 1');
+      assert.equal(queue.items[0].artist, null);
+    });
+
+    it('never asks GnuDB when the setting is off', async () => {
+      settings.cddbLookup = false;
+
+      await scan();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_cd_metadata'));
+    });
+
+    it('ignores a late answer after the disc was rescanned', async () => {
+      let resolveFirst;
+      bridge.handlers.lookup_cd_metadata = () => new Promise((r) => (resolveFirst = r));
+
+      await scan();
+
+      // A second scan replaces the queue before the first lookup answers.
+      bridge.handlers.lookup_cd_metadata = () => null;
+      bridge.handlers.scan_cd = () => [cdTrack({ title: 'Other disc track' })];
+      await scan();
+
+      resolveFirst({ artist: 'Wrong', album: 'Wrong', trackTitles: ['Wrong'] });
+      await settle();
+
+      assert.equal(queue.length, 1, 'the second scan replaced the queue');
+      assert.equal(queue.items[0].title, 'Other disc track', 'the stale lookup did not overwrite it');
     });
   });
 

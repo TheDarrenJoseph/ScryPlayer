@@ -64,3 +64,13 @@ export const scanCd = (drive) => invoke('scan_cd', { drive });
  */
 export const cdTrackUrl = (drive, startLba, endLba) =>
   invoke('cd_track_url', { drive, startLba, endLba });
+
+/**
+ * Artist, album and real track titles for a scanned disc, from GnuDB —
+ * resolves `null` rather than throwing on any failure (offline, no match, a
+ * malformed reply), since the TOC-only placeholder titles are always a fine
+ * fallback. The same contract `fetchVideoInfo` already uses for YouTube.
+ *
+ * @returns {Promise<{ artist: string|null, album: string|null, trackTitles: string[] } | null>}
+ */
+export const lookupCdMetadata = (drive) => invoke('lookup_cd_metadata', { drive });

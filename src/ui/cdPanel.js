@@ -1,4 +1,4 @@
-import { listCdDrives, scanCd } from '../tauri.js';
+import { listCdDrives, lookupCdMetadata, scanCd } from '../tauri.js';
 import { renderQueue } from './queueList.js';
 
 const $ = (id) => document.getElementById(id);
@@ -12,8 +12,12 @@ const asMessage = (err, fallback) => (typeof err === 'string' ? err : (err?.mess
  * contents is the whole "add to queue" step here, the CD equivalent of
  * local's "Add folder…". Like that button, scanning only populates the
  * queue; it does not start playback on its own.
+ *
+ * A scan's TOC-only "Track N" titles are enriched in the background from
+ * GnuDB, when the setting allows it — the same shape as how YouTube's real
+ * title arrives after `youtubePanel.js` queues its placeholder.
  */
-export function createCdPanel(controller, queue, { setStatus }) {
+export function createCdPanel(controller, queue, { setStatus, settings }) {
   const queueEl = $('queue-cd');
   const countEl = $('count-cd');
   const scanBtn = $('btn-scan-cd');
@@ -60,11 +64,39 @@ export function createCdPanel(controller, queue, { setStatus }) {
       }
 
       queue.clear();
-      queue.add(tracks.map((t) => ({ ...t, source: 'cd' })));
+      const queued = tracks.map((t) => ({ ...t, source: 'cd' }));
+      queue.add(queued);
       setStatus(`Found ${tracks.length} track${tracks.length === 1 ? '' : 's'}.`);
+
+      if (settings.cddbLookup) enrich(drive, queued);
     } catch (err) {
       setStatus(asMessage(err, 'Could not read that disc.'), true);
     }
+  }
+
+  /**
+   * Patch TOC-only tracks with real metadata once GnuDB answers.
+   *
+   * `queuedTracks` are checked back against the live queue one at a time
+   * rather than trusted outright — a slow lookup can land after the queue was
+   * cleared, or after a second scan replaced it with a different disc's
+   * tracks entirely, and this must not resurrect or stomp on either.
+   */
+  function enrich(drive, queuedTracks) {
+    lookupCdMetadata(drive).then((info) => {
+      if (!info) return;
+
+      for (const track of queuedTracks) {
+        if (!queue.items.includes(track)) continue;
+
+        const title = info.trackTitles[track.trackNo - 1];
+        if (title) track.title = title;
+        if (info.artist) track.artist = info.artist;
+        if (info.album) track.album = info.album;
+      }
+
+      queue.emit('change', queue);
+    });
   }
 
   scanBtn.addEventListener('click', scan);

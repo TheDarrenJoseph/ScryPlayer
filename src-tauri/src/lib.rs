@@ -1,6 +1,7 @@
 mod cdda;
 #[cfg(target_os = "linux")]
 mod cdda_linux;
+mod cddb;
 mod media;
 mod server;
 
@@ -232,6 +233,30 @@ fn cd_track_url(app: AppHandle, drive: String, start_lba: u32, end_lba: u32) -> 
     )
 }
 
+/// Artist, album and real track titles for a disc, from GnuDB — never
+/// anything read off the disc itself, which carries no text metadata at all.
+/// `None` covers every reason there might be nothing to show (offline, no
+/// match, a malformed reply); the TOC-only "Track N" placeholders from
+/// `scan_cd` are always a fine fallback.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CdMetadataDto {
+    artist: Option<String>,
+    album: Option<String>,
+    track_titles: Vec<String>,
+}
+
+#[tauri::command]
+fn lookup_cd_metadata(drive: String) -> Option<CdMetadataDto> {
+    let toc = cdda::read_toc(&drive).ok()?;
+    let meta = cddb::lookup(&toc)?;
+    Some(CdMetadataDto {
+        artist: meta.artist,
+        album: meta.album,
+        track_titles: meta.track_titles,
+    })
+}
+
 /// Native folder picker.
 ///
 /// These commands are `async` on purpose: the blocking dialog helpers deadlock
@@ -293,6 +318,7 @@ pub fn run() {
             list_cd_drives,
             scan_cd,
             cd_track_url,
+            lookup_cd_metadata,
             pick_folder,
             pick_files
         ])
