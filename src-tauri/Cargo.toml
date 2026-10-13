@@ -25,9 +25,6 @@ lofty = "0.25"
 tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 percent-encoding = "2"
-# The GnuDB disc-metadata lookup: plain outbound HTTP, nothing OS-specific,
-# so unlike disc access itself this needs no platform split.
-ureq = "2"
 
 # Audio CD sector/TOC reading goes through the OS's raw SCSI passthrough,
 # which neither `tauri` nor any other existing dependency exposes.

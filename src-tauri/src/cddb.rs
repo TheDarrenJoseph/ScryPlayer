@@ -1,22 +1,33 @@
-//! GnuDB (classic CDDB protocol, over HTTP) disc-metadata lookup.
+//! GnuDB (classic CDDBP protocol) disc-metadata lookup.
 //!
 //! Deliberately free of `tauri` types, same as `cdda.rs`/`media.rs`: the disc
-//! ID checksum, URL building and response parsing are pure functions and
-//! unit-testable without a network. Only `get` touches the network, and only
-//! `lookup` ties the two requests (`query` then `read`) together.
+//! ID checksum and response parsing are pure functions, unit-testable without
+//! a network. Only `session` touches the network, tying together one
+//! handshake and two commands (`query` then `read`) over a single connection.
 //!
 //! A Red Book audio CD carries no text metadata at all — this is purely a
 //! lookup against GnuDB's database, keyed by a checksum of the disc's TOC.
-//! Doing this from Rust rather than the frontend is deliberate: GnuDB's CGI
-//! gateway predates CORS and sends none of the headers a WebView `fetch()`
-//! would need, so a frontend request would simply be blocked.
+//! Doing this from Rust rather than the frontend isn't a style choice: the
+//! live service speaks the classic protocol over a raw TCP socket, with a
+//! stateful `hello` handshake before anything else — not HTTP at all, so
+//! there is no `fetch()`-shaped way to reach it from a WebView regardless of
+//! CORS or CSP. (An HTTP-over-CGI gateway used to exist for exactly this
+//! reason, and is what an earlier version of this module targeted, but it no
+//! longer responds — verified by hand against the real server before writing
+//! this version, the same way the disc-ID algorithm itself was verified
+//! against the real `libcddb` rather than trusted from documentation.)
+
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 use crate::cdda::{Toc, SECTORS_PER_SECOND};
 
-const SERVER: &str = "http://gnudb.gnudb.org/~cddb/cddb.cgi";
-/// The CDDB "hello" identity sent with every request. Generic on purpose —
+const SERVER_ADDR: &str = "gnudb.gnudb.org:8880";
+const TIMEOUT: Duration = Duration::from_secs(5);
+/// The CDDB "hello" identity sent once per connection. Generic on purpose —
 /// nothing in the protocol needs it to name the real machine or user.
-const HELLO: &str = "scryplayer+localhost+ScryPlayer";
+const HELLO: &str = "scryplayer localhost ScryPlayer";
 
 pub struct CdMetadata {
     pub artist: Option<String>,
@@ -79,15 +90,6 @@ pub fn discid(toc: &Toc) -> u32 {
 
 // ---- query ---------------------------------------------------------------
 
-fn query_url(discid: u32, offsets: &[u32], length: u32) -> String {
-    let offsets_str = offsets.iter().map(|o| o.to_string()).collect::<Vec<_>>().join("+");
-    format!(
-        "{SERVER}?cmd=cddb+query+{discid:08x}+{}+{offsets_str}+{length}&hello={HELLO}+{}&proto=6",
-        offsets.len(),
-        env!("CARGO_PKG_VERSION"),
-    )
-}
-
 /// A `category discid dtitle...` line, the shape of both a single `200`
 /// match and each line of a `210`/`211` list.
 fn parse_match_line(line: &str) -> Option<CddbMatch> {
@@ -117,13 +119,6 @@ fn parse_query_response(body: &str) -> Option<CddbMatch> {
 }
 
 // ---- read ------------------------------------------------------------------
-
-fn read_url(category: &str, discid: u32) -> String {
-    format!(
-        "{SERVER}?cmd=cddb+read+{category}+{discid:08x}&hello={HELLO}+{}&proto=6",
-        env!("CARGO_PKG_VERSION"),
-    )
-}
 
 /// The `210` disc-details response: `DTITLE=Artist / Album` plus one
 /// `TTITLEn=...` line per track, terminated by a lone `.`.
@@ -168,17 +163,50 @@ fn parse_read_response(body: &str) -> Option<CddbDisc> {
 
 // ---- network ---------------------------------------------------------------
 
-fn get(url: &str) -> Result<String, String> {
-    ureq::get(url)
-        .timeout(std::time::Duration::from_secs(5))
-        .call()
-        .map_err(|e| e.to_string())?
-        .into_string()
-        .map_err(|e| e.to_string())
+/// One `\r\n`- or `\n`-terminated line, terminator included — callers
+/// reassemble responses as plain text and hand them to the same
+/// `parse_query_response`/`parse_read_response` that operate on a complete
+/// reply, rather than parsing line-by-line while reading.
+fn read_line(reader: &mut BufReader<&TcpStream>) -> Result<String, String> {
+    let mut line = String::new();
+    let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
+    if n == 0 {
+        return Err("the server closed the connection".into());
+    }
+    Ok(line)
 }
 
-/// Look up a disc's metadata: `query` to find a candidate, then `read` for
-/// its full details. `None` covers every failure mode alike — offline, no
+/// A full server reply: the status line, plus — only for the codes that mean
+/// "list follows" (`210`/`211`) — every line after it up to and including the
+/// lone `.` that ends it. Every other status (`200`, `202`, `401`, …) is a
+/// single line in this protocol.
+fn read_response(reader: &mut BufReader<&TcpStream>) -> Result<String, String> {
+    let first = read_line(reader)?;
+    let code = first.split(' ').next().unwrap_or("");
+
+    if !matches!(code, "210" | "211") {
+        return Ok(first);
+    }
+
+    let mut body = first;
+    loop {
+        let line = read_line(reader)?;
+        let done = line.trim_end() == ".";
+        body.push_str(&line);
+        if done {
+            break;
+        }
+    }
+    Ok(body)
+}
+
+fn send(writer: &mut &TcpStream, command: &str) -> Result<(), String> {
+    write!(writer, "{command}\r\n").map_err(|e| e.to_string())
+}
+
+/// Look up a disc's metadata over one CDDBP connection: the mandatory
+/// `hello` handshake, then `query` to find a candidate, then `read` for its
+/// full details. `None` covers every failure mode alike — unreachable, no
 /// match, a malformed response, a timeout — since there is nothing more
 /// specific a caller could usefully do with any of them; the TOC-only
 /// placeholder listing is always a fine fallback.
@@ -190,9 +218,26 @@ pub fn lookup(toc: &Toc) -> Option<CdMetadata> {
     let offsets = frame_offsets(toc);
     let length = disc_length_secs(toc);
     let id = discid(toc);
+    let offsets_str = offsets.iter().map(u32::to_string).collect::<Vec<_>>().join(" ");
 
-    let found = parse_query_response(&get(&query_url(id, &offsets, length)).ok()?)?;
-    let disc = parse_read_response(&get(&read_url(&found.category, found.discid)).ok()?)?;
+    let addr = SERVER_ADDR.to_socket_addrs().ok()?.next()?;
+    let stream = TcpStream::connect_timeout(&addr, TIMEOUT).ok()?;
+    stream.set_read_timeout(Some(TIMEOUT)).ok();
+    stream.set_write_timeout(Some(TIMEOUT)).ok();
+
+    let mut writer = &stream;
+    let mut reader = BufReader::new(&stream);
+
+    read_line(&mut reader).ok()?; // the greeting banner; nothing to act on
+
+    send(&mut writer, &format!("cddb hello {HELLO}")).ok()?;
+    read_line(&mut reader).ok()?; // the handshake's own "200 ..." reply
+
+    send(&mut writer, &format!("cddb query {id:08x} {} {offsets_str} {length}", offsets.len())).ok()?;
+    let found = parse_query_response(&read_response(&mut reader).ok()?)?;
+
+    send(&mut writer, &format!("cddb read {} {:08x}", found.category, found.discid)).ok()?;
+    let disc = parse_read_response(&read_response(&mut reader).ok()?)?;
 
     Some(CdMetadata {
         artist: disc.artist,
@@ -296,18 +341,5 @@ mod tests {
     #[test]
     fn a_non_success_read_status_yields_nothing() {
         assert!(parse_read_response("401 No such CD entry\r\n.\r\n").is_none());
-    }
-
-    #[test]
-    fn query_url_puts_offsets_and_length_in_the_right_order() {
-        let url = query_url(0x920ef00b, &[150, 28_690], 3822);
-        assert!(url.contains("cmd=cddb+query+920ef00b+2+150+28690+3822"));
-        assert!(url.starts_with(SERVER));
-    }
-
-    #[test]
-    fn read_url_names_the_category_and_discid() {
-        let url = read_url("rock", 0x920ef00b);
-        assert!(url.contains("cmd=cddb+read+rock+920ef00b"));
     }
 }
