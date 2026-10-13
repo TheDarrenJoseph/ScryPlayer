@@ -1,6 +1,4 @@
 //! Filesystem walking and audio tag reading.
-//!
-//! Deliberately free of `tauri` types so it can be compiled and tested on its own.
 
 use std::path::{Path, PathBuf};
 

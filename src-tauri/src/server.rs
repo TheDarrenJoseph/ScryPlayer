@@ -25,6 +25,7 @@ use std::sync::Arc;
 use percent_encoding::percent_decode_str;
 use tiny_http::{Header, Request, Response, Server, StatusCode};
 
+use crate::cdda::{self, SECTOR_BYTES};
 use crate::MediaScope;
 
 pub struct MediaServer {
@@ -209,6 +210,152 @@ fn handle(request: Request, scope: &MediaScope, token: &str) {
     }
 }
 
+/// Reads an audio-CD track on demand as a WAV byte stream: the 44-byte
+/// header, then raw PCM pulled sector-by-sector from the drive. The sector
+/// LBAs come straight from the URL (computed once, at scan time) rather than
+/// being re-derived here, since a single track can draw many of these across
+/// several Range requests as the media element buffers ahead.
+struct CddaStream {
+    device: String,
+    header: [u8; 44],
+    track_start_lba: u32,
+    track_end_lba: u32,
+    pos: u64,
+    limit: u64,
+    sector_buf: Vec<u8>,
+    sector_buf_lba: u32,
+}
+
+impl CddaStream {
+    /// Sectors fetched per drive read — big enough to keep ioctl calls rare
+    /// relative to CD-DA's own data rate, small enough to stay a modest read.
+    const READAHEAD_SECTORS: u32 = 32;
+
+    fn new(device: String, track_start_lba: u32, track_end_lba: u32, start: u64, limit: u64) -> Self {
+        CddaStream {
+            device,
+            header: cdda::wav_header(track_end_lba - track_start_lba),
+            track_start_lba,
+            track_end_lba,
+            pos: start,
+            limit,
+            sector_buf: Vec::new(),
+            sector_buf_lba: 0,
+        }
+    }
+}
+
+impl Read for CddaStream {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let mut written = 0;
+
+        while written < out.len() && self.pos < self.limit {
+            if self.pos < 44 {
+                let start = self.pos as usize;
+                let n = (44 - start).min(out.len() - written).min((self.limit - self.pos) as usize);
+                out[written..written + n].copy_from_slice(&self.header[start..start + n]);
+                written += n;
+                self.pos += n as u64;
+                continue;
+            }
+
+            let data_offset = self.pos - 44;
+            let lba = self.track_start_lba + (data_offset / SECTOR_BYTES as u64) as u32;
+            let in_sector = (data_offset % SECTOR_BYTES as u64) as usize;
+
+            if lba >= self.track_end_lba {
+                break; // past the end of the track
+            }
+
+            let buf_sectors = self.sector_buf.len() as u32 / SECTOR_BYTES;
+            let have_it = !self.sector_buf.is_empty()
+                && lba >= self.sector_buf_lba
+                && lba < self.sector_buf_lba + buf_sectors;
+
+            if !have_it {
+                let count = Self::READAHEAD_SECTORS.min(self.track_end_lba - lba);
+                self.sector_buf = cdda::read_sectors(&self.device, lba, count)
+                    .map_err(std::io::Error::other)?;
+                self.sector_buf_lba = lba;
+                if self.sector_buf.is_empty() {
+                    break; // drive returned nothing; stop rather than loop forever
+                }
+            }
+
+            let buf_offset = (lba - self.sector_buf_lba) as usize * SECTOR_BYTES as usize + in_sector;
+            if buf_offset >= self.sector_buf.len() {
+                break;
+            }
+            let n = (self.sector_buf.len() - buf_offset)
+                .min(out.len() - written)
+                .min((self.limit - self.pos) as usize);
+            out[written..written + n].copy_from_slice(&self.sector_buf[buf_offset..buf_offset + n]);
+            written += n;
+            self.pos += n as u64;
+        }
+
+        Ok(written)
+    }
+}
+
+fn handle_cdda(request: Request, token: &str) {
+    let url = request.url().to_string();
+
+    if query_param(&url, "token").as_deref() != Some(token) {
+        return refuse(request, 403);
+    }
+
+    let (Some(drive), Some(start_lba), Some(end_lba)) = (
+        query_param(&url, "drive"),
+        query_param(&url, "start").and_then(|s| s.parse::<u32>().ok()),
+        query_param(&url, "end").and_then(|s| s.parse::<u32>().ok()),
+    ) else {
+        return refuse(request, 400);
+    };
+    if end_lba <= start_lba {
+        return refuse(request, 400);
+    }
+
+    let len = cdda::stream_len(start_lba, end_lba);
+
+    let range = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Range"))
+        .and_then(|h| parse_range(h.value.as_str(), len));
+
+    let headers = vec![
+        header("Content-Type", "audio/wav"),
+        header("Accept-Ranges", "bytes"),
+    ];
+
+    match range {
+        Some((start, end)) => {
+            let count = end - start + 1;
+            let stream = CddaStream::new(drive, start_lba, end_lba, start, end + 1);
+            let mut headers = headers;
+            headers.push(header("Content-Range", &format!("bytes {start}-{end}/{len}")));
+            let _ = request.respond(Response::new(
+                StatusCode(206),
+                headers,
+                stream,
+                Some(count as usize),
+                None,
+            ));
+        }
+        None => {
+            let stream = CddaStream::new(drive, start_lba, end_lba, 0, len);
+            let _ = request.respond(Response::new(
+                StatusCode(200),
+                headers,
+                stream,
+                Some(len as usize),
+                None,
+            ));
+        }
+    }
+}
+
 /// Bind to an ephemeral loopback port and serve in the background.
 pub fn start(scope: Arc<MediaScope>) -> Result<MediaServer, String> {
     let server = Server::http(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
@@ -228,6 +375,8 @@ pub fn start(scope: Arc<MediaScope>) -> Result<MediaServer, String> {
             let path = request.url().split('?').next().unwrap_or("/").to_string();
             if path.starts_with("/youtube-embed") {
                 serve_youtube_embed(request, &path);
+            } else if path.starts_with("/cdda") {
+                handle_cdda(request, &worker_token);
             } else {
                 handle(request, &scope, &worker_token);
             }

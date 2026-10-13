@@ -14,6 +14,7 @@ before(async () => {
 
 const $ = (id) => document.getElementById(id);
 const dialog = () => $('settings-dialog');
+const settle = () => new Promise((r) => setImmediate(r));
 
 /**
  * Wire the dialog over the markup installed by `beforeEach`.
@@ -22,6 +23,9 @@ const dialog = () => $('settings-dialog');
  * which is what makes it a stand-in for restarting the app — a test that wants
  * to survive one has to hand the stored string across itself.
  */
+/** Swap this per-test to control what "clear the cache" resolves (or rejects) to. */
+let clearCddbCacheImpl;
+
 function setup(stored) {
   if (stored !== undefined) localStorage.setItem(KEY, stored);
 
@@ -31,6 +35,7 @@ function setup(stored) {
   const api = createSettings(values, {
     onChange: (v) => changes.push({ ...v }),
     onForget: () => forgets.push(true),
+    onClearCddbCache: () => clearCddbCacheImpl(),
   });
 
   return { values, changes, forgets, api };
@@ -51,42 +56,43 @@ function clickAt(x, y) {
 beforeEach(() => {
   installAppDom();
   localStorage.clear();
+  clearCddbCacheImpl = async () => {};
 });
 
 describe('loadSettings', () => {
   it('defaults to how the app behaved before the dialog existed', () => {
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
-    assert.deepEqual(DEFAULTS, { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
+    assert.deepEqual(DEFAULTS, { restoreSession: true, water: true, cddbLookup: true });
   });
 
   it('reads what was saved', () => {
     localStorage.setItem(KEY, JSON.stringify({ restoreSession: false, water: false }));
 
-    assert.deepEqual(loadSettings(), { restoreSession: false, water: false });
+    assert.deepEqual(loadSettings(), { restoreSession: false, water: false, cddbLookup: true });
   });
 
   it('fills in per field, so a partial save still loads', () => {
     localStorage.setItem(KEY, JSON.stringify({ water: false }));
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: false });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: false, cddbLookup: true });
   });
 
   it('ignores values of the wrong type', () => {
     localStorage.setItem(KEY, JSON.stringify({ restoreSession: 'yes please', water: 1 }));
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
   });
 
   it('falls back to the defaults when the saved value is unreadable', () => {
     localStorage.setItem(KEY, '{ not json');
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
   });
 
   it('survives a stored null', () => {
     localStorage.setItem(KEY, 'null');
 
-    assert.deepEqual(loadSettings(), { restoreSession: true, water: true });
+    assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: true });
   });
 });
 
@@ -143,10 +149,11 @@ describe('createSettings', () => {
 
   describe('the switches', () => {
     it('start from the values it was given', () => {
-      setup(JSON.stringify({ restoreSession: false, water: true }));
+      setup(JSON.stringify({ restoreSession: false, water: true, cddbLookup: false }));
 
       assert.equal($('set-restore').checked, false);
       assert.equal($('set-water').checked, true);
+      assert.equal($('set-cddb-lookup').checked, false);
     });
 
     it('report and persist a change', () => {
@@ -155,8 +162,8 @@ describe('createSettings', () => {
       toggle('set-water', false);
 
       assert.equal(values.water, false, 'the caller sees it through the object it passed');
-      assert.deepEqual(changes.at(-1), { restoreSession: true, water: false });
-      assert.deepEqual(loadSettings(), { restoreSession: true, water: false }, 'and it is saved');
+      assert.deepEqual(changes.at(-1), { restoreSession: true, water: false, cddbLookup: true });
+      assert.deepEqual(loadSettings(), { restoreSession: true, water: false, cddbLookup: true }, 'and it is saved');
     });
 
     it('keeps the two settings independent', () => {
@@ -164,8 +171,17 @@ describe('createSettings', () => {
 
       toggle('set-restore', false);
 
-      assert.deepEqual(values, { restoreSession: false, water: true });
+      assert.deepEqual(values, { restoreSession: false, water: true, cddbLookup: true });
       assert.equal($('set-water').checked, true);
+    });
+
+    it('persists the GnuDB lookup switch like the others', () => {
+      const { values } = setup();
+
+      toggle('set-cddb-lookup', false);
+
+      assert.deepEqual(values, { restoreSession: true, water: true, cddbLookup: false });
+      assert.deepEqual(loadSettings(), { restoreSession: true, water: true, cddbLookup: false });
     });
 
     it('survives a reload', () => {
@@ -219,12 +235,52 @@ describe('createSettings', () => {
 
       click($('btn-forget'));
 
-      assert.deepEqual(values, { restoreSession: false, water: false });
+      assert.deepEqual(values, { restoreSession: false, water: false, cddbLookup: true });
       assert.deepEqual(
         loadSettings(),
-        { restoreSession: false, water: false },
+        { restoreSession: false, water: false, cddbLookup: true },
         'settings outlive the session they describe',
       );
+    });
+  });
+
+  describe('clearing the cached CD info', () => {
+    it('asks the caller and says so in the dialog', async () => {
+      let asked = false;
+      clearCddbCacheImpl = async () => {
+        asked = true;
+      };
+      setup();
+      click($('btn-settings'));
+
+      click($('btn-clear-cddb-cache'));
+      await settle();
+
+      assert.equal(asked, true);
+      assert.equal($('settings-note').textContent, 'Cleared cached CD info.');
+    });
+
+    it('says so when it fails, rather than throwing', async () => {
+      clearCddbCacheImpl = async () => {
+        throw new Error('disk is unhappy');
+      };
+      setup();
+      click($('btn-settings'));
+
+      click($('btn-clear-cddb-cache'));
+      await settle();
+
+      assert.equal($('settings-note').textContent, 'Could not clear the cached CD info.');
+    });
+
+    it('does not disturb the settings themselves', async () => {
+      const { values } = setup();
+      click($('btn-settings'));
+
+      click($('btn-clear-cddb-cache'));
+      await settle();
+
+      assert.deepEqual(values, { restoreSession: true, water: true, cddbLookup: true });
     });
   });
 

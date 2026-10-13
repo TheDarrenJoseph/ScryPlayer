@@ -1,7 +1,9 @@
 import { Controller } from './core/controller.js';
 import { Queue } from './core/queue.js';
+import { CdAdapter } from './sources/cdAdapter.js';
 import { LocalAdapter } from './sources/localAdapter.js';
 import { YouTubeBridgeAdapter } from './sources/youtubeBridgeAdapter.js';
+import { createCdPanel } from './ui/cdPanel.js';
 import { createLocalPanel } from './ui/localPanel.js';
 import { createPicker } from './ui/picker.js';
 import { createStatus } from './ui/status.js';
@@ -9,7 +11,7 @@ import { createSettings, loadSettings } from './ui/settings.js';
 import { createTransport } from './ui/transport.js';
 import { createYouTubePanel } from './ui/youtubePanel.js';
 import { startWater } from './ui/water.js';
-import { invoke } from './tauri.js';
+import { clearCddbCache, invoke } from './tauri.js';
 
 const STORE_KEY = 'scry.v1';
 /** A scan can return thousands of tracks; localStorage cannot hold them all. */
@@ -53,6 +55,7 @@ function main() {
   const controller = new Controller();
   const localQueue = new Queue('local');
   const youtubeQueue = new Queue('youtube');
+  const cdQueue = new Queue('cd');
 
   controller.register('local', new LocalAdapter(), localQueue);
   controller.register(
@@ -60,10 +63,12 @@ function main() {
     new YouTubeBridgeAdapter(document.getElementById('yt-mount')),
     youtubeQueue,
   );
+  controller.register('cd', new CdAdapter(), cdQueue);
 
   createTransport(controller);
   const localPanel = createLocalPanel(controller, localQueue, { setStatus });
   createYouTubePanel(controller, youtubeQueue, { setStatus });
+  createCdPanel(controller, cdQueue, { setStatus, settings });
 
   // Both panels clear the same way; each button names the queue it empties.
   for (const button of document.querySelectorAll('.btn-clear-playlist')) {
@@ -82,6 +87,7 @@ function main() {
   if (settings.restoreSession) {
     if (saved.localQueue) localQueue.restore(saved.localQueue);
     if (saved.youtubeQueue) youtubeQueue.restore(saved.youtubeQueue);
+    if (saved.cdQueue) cdQueue.restore(saved.cdQueue);
 
     // Asset-scope grants do not survive a restart, so restored local tracks
     // have to be re-granted before anything tries to play them.
@@ -99,7 +105,7 @@ function main() {
 
   const picker = createPicker(controller);
   const startingSource = settings.restoreSession ? saved.source : null;
-  picker.select(startingSource === 'youtube' ? 'youtube' : 'local');
+  picker.select(['youtube', 'cd'].includes(startingSource) ? startingSource : 'local');
 
   localPanel.init();
 
@@ -123,6 +129,7 @@ function main() {
           muted: controller.muted,
           localQueue: snapshotQueue(localQueue),
           youtubeQueue: snapshotQueue(youtubeQueue),
+          cdQueue: snapshotQueue(cdQueue),
         }),
       );
     } catch {
@@ -153,6 +160,7 @@ function main() {
         // Nothing saved is the state we wanted anyway.
       }
     },
+    onClearCddbCache: () => clearCddbCache(),
   });
 }
 

@@ -1,3 +1,8 @@
+mod cdda;
+#[cfg(target_os = "linux")]
+mod cdda_linux;
+mod cddb;
+mod cddb_cache;
 mod media;
 mod server;
 
@@ -10,6 +15,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
+use cdda::DriveInfo;
 use media::{DirListing, Track};
 use server::MediaServer;
 
@@ -168,6 +174,96 @@ fn media_server_port(app: AppHandle) -> u16 {
     app.state::<MediaServer>().port
 }
 
+/// A track as read straight from the disc's table of contents — no tags, so
+/// `title` is just a placeholder ("Track 1", "Track 2", …); real metadata,
+/// when there is any, arrives separately from `lookup_cd_metadata`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CdTrack {
+    drive: String,
+    track_no: u32,
+    start_lba: u32,
+    end_lba: u32,
+    title: String,
+    duration: f64,
+}
+
+/// CD drives currently visible to the OS (not necessarily holding a disc).
+#[tauri::command]
+fn list_cd_drives() -> Vec<DriveInfo> {
+    cdda::list_drives()
+}
+
+/// Read `drive`'s table of contents and report its audio tracks.
+#[tauri::command]
+fn scan_cd(drive: String) -> Result<Vec<CdTrack>, String> {
+    let toc = cdda::read_toc(&drive)?;
+    Ok(toc
+        .tracks
+        .into_iter()
+        .map(|t| CdTrack {
+            drive: drive.clone(),
+            track_no: t.track_no,
+            start_lba: t.start_lba,
+            end_lba: t.end_lba,
+            title: format!("Track {}", t.track_no),
+            duration: t.duration,
+        })
+        .collect())
+}
+
+/// The loopback URL the media element should play this CD track from. Unlike
+/// `media_url` this needs no scope check — a CD track isn't a filesystem
+/// path, so there's nothing for `MediaScope` to gate.
+#[tauri::command]
+fn cd_track_url(app: AppHandle, drive: String, start_lba: u32, end_lba: u32) -> String {
+    let server = app.state::<MediaServer>();
+    format!(
+        "http://127.0.0.1:{}/cdda?token={}&drive={}&start={}&end={}",
+        server.port,
+        server.token,
+        utf8_percent_encode(&drive, NON_ALPHANUMERIC),
+        start_lba,
+        end_lba
+    )
+}
+
+fn cddb_cache_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("cddb_cache.json"))
+}
+
+/// Reads through `cddb_cache` before ever asking GnuDB itself — a shared
+/// public server, and a disc's metadata never changes, so a disc already
+/// looked up (this session or a previous one) must not be asked again.
+#[tauri::command]
+fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<cddb::CdMetadata> {
+    let toc = cdda::read_toc(&drive).ok()?;
+    let id = cddb::discid(&toc);
+    let cache_path = cddb_cache_path(&app);
+
+    if let Some(path) = &cache_path {
+        if let Some(cached) = cddb_cache::get(path, id) {
+            return cached;
+        }
+    }
+
+    let meta = cddb::lookup(&toc);
+    if let Some(path) = &cache_path {
+        cddb_cache::put(path, id, meta.as_ref());
+    }
+    meta
+}
+
+/// Forget every cached GnuDB lookup, so the next scan of each disc asks
+/// again — for when a cached entry turns out wrong, or just to reclaim the
+/// (small) disk space.
+#[tauri::command]
+fn clear_cddb_cache(app: AppHandle) {
+    if let Some(path) = cddb_cache_path(&app) {
+        cddb_cache::clear(&path);
+    }
+}
+
 /// Native folder picker.
 ///
 /// These commands are `async` on purpose: the blocking dialog helpers deadlock
@@ -226,6 +322,11 @@ pub fn run() {
             grant_paths,
             media_url,
             media_server_port,
+            list_cd_drives,
+            scan_cd,
+            cd_track_url,
+            lookup_cd_metadata,
+            clear_cddb_cache,
             pick_folder,
             pick_files
         ])

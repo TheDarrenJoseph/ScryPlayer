@@ -51,6 +51,21 @@
             </svg>
             <span>YouTube</span>
           </button>
+          <button
+            class="picker__opt"
+            id="tab-cd"
+            role="tab"
+            data-source="cd"
+            aria-controls="panel-cd"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="2.4" />
+            </svg>
+            <span>Audio CD</span>
+          </button>
         </nav>
 
         <div class="topbar__end">
@@ -131,6 +146,26 @@
               <button class="btn btn--ghost btn--sm btn-clear-playlist" id="btn-clear-youtube" data-source="youtube">Clear</button>
             </div>
             <ol class="queue" id="queue-youtube"></ol>
+          </div>
+        </section>
+
+        <!-- ───────────── Audio CD ───────────── -->
+        <section
+          class="panel panel--cd"
+          id="panel-cd"
+          role="tabpanel"
+          aria-labelledby="tab-cd"
+          hidden
+        >
+          <div class="pane pane--queue">
+            <div class="pane__head">
+              <h2 class="pane__title">Queue <span class="count" id="count-cd">0</span></h2>
+              <div class="pane__actions">
+                <button class="btn btn--ghost" id="btn-scan-cd">Scan disc…</button>
+                <button class="btn btn--ghost btn--sm btn-clear-playlist" id="btn-clear-cd" data-source="cd">Clear</button>
+              </div>
+            </div>
+            <ol class="queue" id="queue-cd"></ol>
           </div>
         </section>
       </main>
@@ -258,13 +293,30 @@
           </div>
           <input class="switch" type="checkbox" id="set-water" />
         </li>
+
+        <li class="setting">
+          <div class="setting__text">
+            <label class="setting__name" for="set-cddb-lookup">Look up CD info from GnuDB</label>
+            <p class="setting__hint">
+              Fetches artist, album and track titles for a scanned disc from GnuDB
+              (gnudb.gnudb.org), a public CDDB-style database. Only a checksum of the disc's
+              track layout is sent.
+            </p>
+          </div>
+          <input class="switch" type="checkbox" id="set-cddb-lookup" />
+        </li>
       </ul>
 
       <div class="settings__foot">
         <p class="settings__note" id="settings-note" role="status" aria-live="polite"></p>
-        <button class="btn btn--ghost btn--sm btn--danger" type="button" id="btn-forget">
-          Forget saved session
-        </button>
+        <div class="settings__actions">
+          <button class="btn btn--ghost btn--sm" type="button" id="btn-clear-cddb-cache">
+            Clear cached CD info
+          </button>
+          <button class="btn btn--ghost btn--sm btn--danger" type="button" id="btn-forget">
+            Forget saved session
+          </button>
+        </div>
       </div>
     </dialog>
 

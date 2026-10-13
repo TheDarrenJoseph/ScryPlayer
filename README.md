@@ -2,7 +2,7 @@
 
 A media player meant as a local web app
 
-This was initially Generated via [Claude Code](https://claude.com/product/claude-code) just to see how well it can do from scratch for this particular set of requirements
+This project has been completely Generated and maintained using [Claude Code](https://claude.com/product/claude-code) 
 
 This player supports two sources: 
 1. Local files / folders

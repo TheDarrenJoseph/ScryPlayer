@@ -266,6 +266,12 @@ svg {
   min-height: 0;
 }
 
+/* A disc has nothing to browse — just its queue — so it gets the full width
+   rather than sitting beside an empty pane. */
+.panel--cd {
+  grid-template-columns: 1fr;
+}
+
 .panel[hidden] {
   display: none;
 }
@@ -1055,6 +1061,13 @@ svg {
     grid-template-rows: minmax(0, 1fr) minmax(0, 0.8fr);
   }
 
+  /* `.panel--cd` has only one pane, not two — stacking it into the same
+     1fr/0.8fr row split as the other panels would leave its single pane
+     fighting for a fraction of the height, with dead space below it. */
+  .panel--cd {
+    grid-template-rows: none;
+  }
+
   .transport {
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   }
@@ -1140,6 +1153,11 @@ svg {
 .settings__note {
   font-size: 12px;
   color: var(--moon-faint);
+}
+
+.settings__actions {
+  display: flex;
+  gap: 8px;
 }
 
 .btn--danger:hover {
