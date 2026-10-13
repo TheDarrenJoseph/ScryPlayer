@@ -13,7 +13,7 @@
     "test:coverage": "node --test --experimental-test-coverage",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:all": "npm test && npm run test:rust",
-    "screenshot": "node scripts/update-screenshot.js",
+    "screenshot": "bash scripts/update-screenshot.sh",
     "release": "bash scripts/tag-release.sh"
   },
   "devDependencies": {
