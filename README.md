@@ -163,16 +163,16 @@ All user-supplied text (filenames, tags, YouTube titles) reaches the DOM via
 
 Don't forget to install `x11-utils imagemagick` if needed
 
-Get the running app into the state you want shown, then refresh one of the
-above with:
-
 ```bash
 GDK_BACKEND=x11 npm run dev
-# in another terminal, once the app window is open and showing what you want:
-npm run screenshot -- local
-npm run screenshot -- youtube
-npm run screenshot -- cd
+# in another terminal:
+npm run screenshot
 ```
+
+With no target named, it walks you through picking a screenshot and getting
+the app ready before capturing it. To skip straight to one (app already in
+the right state), name it directly: `npm run screenshot -- local`,
+`-- youtube`, or `-- cd`.
 
 ### Cutting a release
 

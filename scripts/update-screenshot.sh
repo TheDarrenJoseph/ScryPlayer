@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
 # Overwrites one of the README screenshots with a fresh capture of the
-# running app window. Get the app into the state you want shown (`npm run
-# dev`, then load a local folder, a YouTube link, or scan an audio CD), then
-# run:
+# running app window. Run it with no arguments for an interactive walk-through
+# that tells you what to do before each shot, or name a target directly to
+# skip straight to capturing it:
 #
+#   scripts/update-screenshot.sh
 #   scripts/update-screenshot.sh local
 #   scripts/update-screenshot.sh youtube
 #   scripts/update-screenshot.sh cd
@@ -25,13 +26,27 @@ target_file() {
   esac
 }
 
+target_instructions() {
+  case "$1" in
+    local)
+      echo 'Launch the player (`npm run dev` if it is not already running), open the Local Files tab, and get a folder loaded with its queue showing.'
+      ;;
+    youtube)
+      echo 'Open the YouTube tab and paste in a link so the embedded player and its queue are both showing.'
+      ;;
+    cd)
+      echo 'Open the Audio CD tab, insert a disc, and scan it so the track list is showing.'
+      ;;
+  esac
+}
+
 usage_and_exit() {
   if [[ -n "${1:-}" ]]; then
     printf '%s\n\n' "$1" >&2
   fi
-  printf 'Usage: scripts/update-screenshot.sh <local|youtube|cd> [--window-id=<id>]\n\n' >&2
-  printf 'Run the app (`npm run dev`), get it into the state you want captured,\n' >&2
-  printf 'then run this with the matching target to overwrite that README screenshot.\n' >&2
+  printf 'Usage: scripts/update-screenshot.sh [local|youtube|cd] [--window-id=<id>]\n\n' >&2
+  printf 'With no target, walks you through picking one and getting the app ready.\n' >&2
+  printf 'Named directly, captures that target right away.\n' >&2
   exit 1
 }
 
@@ -47,20 +62,14 @@ find_window_ids() {
     | grep -oE '0x[0-9a-f]+' || true
 }
 
-main() {
-  local target="" window_id_override=""
-  for arg in "$@"; do
-    case "$arg" in
-      --window-id=*) window_id_override="${arg#--window-id=}" ;;
-      --*) ;;
-      *) [[ -z "$target" ]] && target="$arg" ;;
-    esac
-  done
+# Captures $1 (a target name) to its README image, using $2 as the window id
+# if given, else finding the "Scry Player" window itself. Exits via
+# usage_and_exit on any failure, same as a direct, non-interactive run would.
+capture() {
+  local target="$1" window_id_override="${2:-}"
 
   local out_name
-  if [[ -z "$target" ]] || ! out_name="$(target_file "$target")"; then
-    usage_and_exit "Target must be one of: local, youtube, cd"
-  fi
+  out_name="$(target_file "$target")" || usage_and_exit "Target must be one of: local, youtube, cd"
 
   for bin in xwininfo import; do
     command -v "$bin" >/dev/null 2>&1 || usage_and_exit \
@@ -113,6 +122,56 @@ The window may have closed, moved off a capturable surface, or the compositor is
   local kb
   kb="$(awk -v s="$size" 'BEGIN { printf "%.0f", s / 1024 }')"
   echo "Saved $target screenshot to images/$out_name (${kb} KB)."
+}
+
+# No target named on the command line: walk the user through picking one,
+# getting the app into the right state, and capturing it — looping so a
+# whole session's worth of screenshots can be redone without re-running the
+# script each time.
+interactive() {
+  local window_id_override="$1"
+
+  while true; do
+    echo
+    echo "Which screenshot do you want to update?"
+    local target=""
+    select choice in "Local Files" "YouTube" "Audio CD" "Quit"; do
+      case "$REPLY" in
+        1) target=local; break ;;
+        2) target=youtube; break ;;
+        3) target=cd; break ;;
+        4) exit 0 ;;
+        *) echo "Pick a number 1-4." ;;
+      esac
+    done
+    # Also reached on EOF (e.g. piped input ran out, or Ctrl+D) — select
+    # exits its own loop in that case without ever setting $target, and
+    # without this it would spin forever re-prompting a closed stdin.
+    [[ -n "$target" ]] || exit 0
+
+    echo
+    echo "$(target_instructions "$target")"
+    read -r -p "Press Enter once it's ready (or Ctrl+C to cancel)... "
+
+    capture "$target" "$window_id_override"
+  done
+}
+
+main() {
+  local target="" window_id_override=""
+  for arg in "$@"; do
+    case "$arg" in
+      --window-id=*) window_id_override="${arg#--window-id=}" ;;
+      --*) ;;
+      *) [[ -z "$target" ]] && target="$arg" ;;
+    esac
+  done
+
+  if [[ -n "$target" ]]; then
+    capture "$target" "$window_id_override"
+  else
+    interactive "$window_id_override"
+  fi
 }
 
 main "$@"
