@@ -41,10 +41,12 @@ pub struct Toc {
     pub tracks: Vec<CdTrack>,
 }
 
-/// `READ TOC/PMA/ATIP` (opcode 0x43), format 0 (plain TOC), LBA addressing:
-/// always the same bytes, since it always asks for the same thing — every
-/// track starting from track 1, with a 1024-byte allocation comfortably
-/// bigger than any real disc's TOC.
+/// The Command Descriptor Block for `READ TOC/PMA/ATIP`.
+///
+/// Opcode 0x43, format 0 (plain TOC), LBA addressing: always the same bytes,
+/// since it always asks for the same thing — every track starting from
+/// track 1, with a 1024-byte allocation comfortably bigger than any real
+/// disc's TOC.
 const READ_TOC_CDB: [u8; 10] = [
     0x43, // opcode: READ TOC/PMA/ATIP
     0x00, // MSF bit clear: addresses come back as LBA, not MSF
@@ -55,10 +57,12 @@ const READ_TOC_CDB: [u8; 10] = [
     0x00, // control
 ];
 
-/// `READ CD` (opcode 0xBE): CD-DA sector type, user data only, so each
-/// returned sector is exactly the raw 2352-byte frame already on the disc.
-/// Unlike `READ_TOC_CDB`, this genuinely differs per call — it names where
-/// and how much to read — so it stays a function, not a constant.
+/// Builds a Command Descriptor Block for `READ CD`.
+///
+/// Opcode 0xBE, CD-DA sector type, user data only, so each returned sector
+/// is exactly the raw 2352-byte frame already on the disc. Unlike
+/// `READ_TOC_CDB`, this genuinely differs per call — it names where and how
+/// much to read — so it stays a function, not a constant.
 fn build_read_cd_cdb(start_lba: u32, sector_count: u32) -> [u8; 12] {
     const EXPECTED_SECTOR_TYPE_CDDA: u8 = 1 << 2;
     const USER_DATA_ONLY: u8 = 0x10;
