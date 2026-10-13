@@ -1155,6 +1155,11 @@ svg {
   color: var(--moon-faint);
 }
 
+.settings__actions {
+  display: flex;
+  gap: 8px;
+}
+
 .btn--danger:hover {
   color: var(--danger);
   border-color: rgba(217, 138, 138, 0.4);

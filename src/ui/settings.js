@@ -53,8 +53,10 @@ function save(values) {
  * @param {object} handlers
  * @param {(values: object) => void} handlers.onChange after any setting changes
  * @param {() => void} handlers.onForget the saved session should be discarded
+ * @param {() => Promise<void>} handlers.onClearCddbCache the cached GnuDB
+ *   lookups should be discarded
  */
-export function createSettings(values, { onChange, onForget }) {
+export function createSettings(values, { onChange, onForget, onClearCddbCache }) {
   const dialog = $('settings-dialog');
   const note = $('settings-note');
   const restore = $('set-restore');
@@ -79,6 +81,15 @@ export function createSettings(values, { onChange, onForget }) {
     onForget();
     // Said in the dialog rather than the topbar status, which is behind it.
     note.textContent = 'Saved session forgotten.';
+  });
+
+  $('btn-clear-cddb-cache').addEventListener('click', async () => {
+    try {
+      await onClearCddbCache();
+      note.textContent = 'Cleared cached CD info.';
+    } catch {
+      note.textContent = 'Could not clear the cached CD info.';
+    }
   });
 
   $('btn-settings').addEventListener('click', () => {

@@ -257,6 +257,10 @@ impl From<cddb::CdMetadata> for CdMetadataDto {
     }
 }
 
+fn cddb_cache_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("cddb_cache.json"))
+}
+
 /// Reads through `cddb_cache` before ever asking GnuDB itself — a shared
 /// public server, and a disc's metadata never changes, so a disc already
 /// looked up (this session or a previous one) must not be asked again.
@@ -264,7 +268,7 @@ impl From<cddb::CdMetadata> for CdMetadataDto {
 fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<CdMetadataDto> {
     let toc = cdda::read_toc(&drive).ok()?;
     let id = cddb::discid(&toc);
-    let cache_path = app.path().app_cache_dir().ok().map(|d| d.join("cddb_cache.json"));
+    let cache_path = cddb_cache_path(&app);
 
     if let Some(path) = &cache_path {
         if let Some(cached) = cddb_cache::get(path, id) {
@@ -277,6 +281,16 @@ fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<CdMetadataDto> {
         cddb_cache::put(path, id, meta.as_ref());
     }
     meta.map(CdMetadataDto::from)
+}
+
+/// Forget every cached GnuDB lookup, so the next scan of each disc asks
+/// again — for when a cached entry turns out wrong, or just to reclaim the
+/// (small) disk space.
+#[tauri::command]
+fn clear_cddb_cache(app: AppHandle) {
+    if let Some(path) = cddb_cache_path(&app) {
+        cddb_cache::clear(&path);
+    }
 }
 
 /// Native folder picker.
@@ -341,6 +355,7 @@ pub fn run() {
             scan_cd,
             cd_track_url,
             lookup_cd_metadata,
+            clear_cddb_cache,
             pick_folder,
             pick_files
         ])

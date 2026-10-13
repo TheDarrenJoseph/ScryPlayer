@@ -14,6 +14,7 @@ before(async () => {
 
 const $ = (id) => document.getElementById(id);
 const dialog = () => $('settings-dialog');
+const settle = () => new Promise((r) => setImmediate(r));
 
 /**
  * Wire the dialog over the markup installed by `beforeEach`.
@@ -22,6 +23,9 @@ const dialog = () => $('settings-dialog');
  * which is what makes it a stand-in for restarting the app — a test that wants
  * to survive one has to hand the stored string across itself.
  */
+/** Swap this per-test to control what "clear the cache" resolves (or rejects) to. */
+let clearCddbCacheImpl;
+
 function setup(stored) {
   if (stored !== undefined) localStorage.setItem(KEY, stored);
 
@@ -31,6 +35,7 @@ function setup(stored) {
   const api = createSettings(values, {
     onChange: (v) => changes.push({ ...v }),
     onForget: () => forgets.push(true),
+    onClearCddbCache: () => clearCddbCacheImpl(),
   });
 
   return { values, changes, forgets, api };
@@ -51,6 +56,7 @@ function clickAt(x, y) {
 beforeEach(() => {
   installAppDom();
   localStorage.clear();
+  clearCddbCacheImpl = async () => {};
 });
 
 describe('loadSettings', () => {
@@ -235,6 +241,46 @@ describe('createSettings', () => {
         { restoreSession: false, water: false, cddbLookup: true },
         'settings outlive the session they describe',
       );
+    });
+  });
+
+  describe('clearing the cached CD info', () => {
+    it('asks the caller and says so in the dialog', async () => {
+      let asked = false;
+      clearCddbCacheImpl = async () => {
+        asked = true;
+      };
+      setup();
+      click($('btn-settings'));
+
+      click($('btn-clear-cddb-cache'));
+      await settle();
+
+      assert.equal(asked, true);
+      assert.equal($('settings-note').textContent, 'Cleared cached CD info.');
+    });
+
+    it('says so when it fails, rather than throwing', async () => {
+      clearCddbCacheImpl = async () => {
+        throw new Error('disk is unhappy');
+      };
+      setup();
+      click($('btn-settings'));
+
+      click($('btn-clear-cddb-cache'));
+      await settle();
+
+      assert.equal($('settings-note').textContent, 'Could not clear the cached CD info.');
+    });
+
+    it('does not disturb the settings themselves', async () => {
+      const { values } = setup();
+      click($('btn-settings'));
+
+      click($('btn-clear-cddb-cache'));
+      await settle();
+
+      assert.deepEqual(values, { restoreSession: true, water: true, cddbLookup: true });
     });
   });
 

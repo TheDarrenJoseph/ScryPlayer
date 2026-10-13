@@ -74,3 +74,6 @@ export const cdTrackUrl = (drive, startLba, endLba) =>
  * @returns {Promise<{ artist: string|null, album: string|null, trackTitles: string[] } | null>}
  */
 export const lookupCdMetadata = (drive) => invoke('lookup_cd_metadata', { drive });
+
+/** Forget every cached GnuDB lookup, so the next scan of each disc asks again. */
+export const clearCddbCache = () => invoke('clear_cddb_cache');

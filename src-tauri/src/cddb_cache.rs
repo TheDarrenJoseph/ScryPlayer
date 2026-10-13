@@ -49,6 +49,12 @@ pub fn put(path: &Path, discid: u32, value: Option<&CdMetadata>) {
     }
 }
 
+/// Drop every cached lookup. A missing file is not an error — there was
+/// nothing cached either way, which is the state this is trying to reach.
+pub fn clear(path: &Path) {
+    let _ = fs::remove_file(path);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +109,21 @@ mod tests {
         assert_eq!(get(&path, 1).unwrap().unwrap().artist.as_deref(), Some("A"));
         assert_eq!(get(&path, 2).unwrap().unwrap().artist.as_deref(), Some("B"));
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn clear_forgets_everything() {
+        let path = temp_path();
+        let meta = CdMetadata { artist: Some("A".into()), album: None, track_titles: vec![] };
+        put(&path, 1, Some(&meta));
+
+        clear(&path);
+
+        assert_eq!(get(&path, 1), None, "back to never having looked");
+    }
+
+    #[test]
+    fn clearing_an_already_absent_cache_is_not_an_error() {
+        clear(&temp_path()); // must not panic
     }
 }

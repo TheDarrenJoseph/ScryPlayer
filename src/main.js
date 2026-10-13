@@ -11,7 +11,7 @@ import { createSettings, loadSettings } from './ui/settings.js';
 import { createTransport } from './ui/transport.js';
 import { createYouTubePanel } from './ui/youtubePanel.js';
 import { startWater } from './ui/water.js';
-import { invoke } from './tauri.js';
+import { clearCddbCache, invoke } from './tauri.js';
 
 const STORE_KEY = 'scry.v1';
 /** A scan can return thousands of tracks; localStorage cannot hold them all. */
@@ -160,6 +160,7 @@ function main() {
         // Nothing saved is the state we wanted anyway.
       }
     },
+    onClearCddbCache: () => clearCddbCache(),
   });
 }
 
