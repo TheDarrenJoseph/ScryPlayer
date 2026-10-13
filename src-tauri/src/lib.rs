@@ -2,6 +2,7 @@ mod cdda;
 #[cfg(target_os = "linux")]
 mod cdda_linux;
 mod cddb;
+mod cddb_cache;
 mod media;
 mod server;
 
@@ -246,15 +247,36 @@ struct CdMetadataDto {
     track_titles: Vec<String>,
 }
 
+impl From<cddb::CdMetadata> for CdMetadataDto {
+    fn from(meta: cddb::CdMetadata) -> Self {
+        CdMetadataDto {
+            artist: meta.artist,
+            album: meta.album,
+            track_titles: meta.track_titles,
+        }
+    }
+}
+
+/// Reads through `cddb_cache` before ever asking GnuDB itself — a shared
+/// public server, and a disc's metadata never changes, so a disc already
+/// looked up (this session or a previous one) must not be asked again.
 #[tauri::command]
-fn lookup_cd_metadata(drive: String) -> Option<CdMetadataDto> {
+fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<CdMetadataDto> {
     let toc = cdda::read_toc(&drive).ok()?;
-    let meta = cddb::lookup(&toc)?;
-    Some(CdMetadataDto {
-        artist: meta.artist,
-        album: meta.album,
-        track_titles: meta.track_titles,
-    })
+    let id = cddb::discid(&toc);
+    let cache_path = app.path().app_cache_dir().ok().map(|d| d.join("cddb_cache.json"));
+
+    if let Some(path) = &cache_path {
+        if let Some(cached) = cddb_cache::get(path, id) {
+            return cached.map(CdMetadataDto::from);
+        }
+    }
+
+    let meta = cddb::lookup(&toc);
+    if let Some(path) = &cache_path {
+        cddb_cache::put(path, id, meta.as_ref());
+    }
+    meta.map(CdMetadataDto::from)
 }
 
 /// Native folder picker.

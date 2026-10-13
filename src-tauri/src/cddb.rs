@@ -16,10 +16,16 @@
 //! longer responds — verified by hand against the real server before writing
 //! this version, the same way the disc-ID algorithm itself was verified
 //! against the real `libcddb` rather than trusted from documentation.)
+//!
+//! Callers should go through `cddb_cache` rather than `lookup` directly —
+//! GnuDB is a shared public server, and a disc's metadata is immutable, so
+//! there is no reason a second scan of the same disc should ask it again.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 
 use crate::cdda::{Toc, SECTORS_PER_SECOND};
 
@@ -29,6 +35,10 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// nothing in the protocol needs it to name the real machine or user.
 const HELLO: &str = "scryplayer localhost ScryPlayer";
 
+/// `Serialize`/`Deserialize` so `cddb_cache.rs` can write this straight to
+/// disk — a disc's metadata does not change, so the cached form is exactly
+/// the looked-up form, no separate storage shape needed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CdMetadata {
     pub artist: Option<String>,
     pub album: Option<String>,
