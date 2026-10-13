@@ -1,6 +1,6 @@
 [package]
 name = "scry-player"
-version = "0.1.2"
+version = "0.1.3"
 description = "Scry Player"
 authors = ["Darren Joseph"]
 edition = "2021"
