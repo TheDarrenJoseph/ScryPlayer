@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
-// Overwrites one of the two README screenshots with a fresh capture of the
+// Overwrites one of the README screenshots with a fresh capture of the
 // running app window. Get the app into the state you want shown (`npm run
-// dev`, then load a local folder or a YouTube link), then run:
+// dev`, then load a local folder, a YouTube link, or scan an audio CD), then
+// run:
 //
 //   node scripts/update-screenshot.js local
 //   node scripts/update-screenshot.js youtube
+//   node scripts/update-screenshot.js cd
 //
 // Only knows how to find the window on Linux (X11/XWayland) and macOS.
 
@@ -18,6 +20,7 @@ const WINDOW_TITLE = 'Scry Player';
 const TARGETS = {
   local: 'example_local_screenshot.png',
   youtube: 'example_youtube_screenshot.png',
+  cd: 'example_cd_screenshot.png',
 };
 
 function usageAndExit(message) {

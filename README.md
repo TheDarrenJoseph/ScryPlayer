@@ -4,9 +4,10 @@ A media player meant as a local web app
 
 This project has been completely Generated and maintained using [Claude Code](https://claude.com/product/claude-code) 
 
-This player supports two sources: 
+This player supports three sources: 
 1. Local files / folders
 2. YouTube
+3. Audio CDs (Linux only for now — see [Known limits](#known-limits))
 
 Switch between them with the picker at the top.
 
@@ -33,6 +34,7 @@ Switch between them with the picker at the top.
 
 ![Embedded YouTube player example](images/example_youtube_screenshot.png)
 ![Local music player example](images/example_local_screenshot.png)
+![Audio CD example](images/example_cd_screenshot.png)
 
 
 ## Known limits
@@ -48,6 +50,10 @@ Switch between them with the picker at the top.
   unplayable rather than hidden.
 - Restored sessions cap at 500 tracks per queue, the practical `localStorage`
   limit.
+- Audio CD playback only works on Linux right now — reading raw disc sectors
+  is OS-specific, and only the Linux (`SG_IO`) path is implemented so far.
+- CD track titles/artist/album come from an online lookup (GnuDB), opt-out in
+  Settings — a disc with nothing to show still lists "Track 1", "Track 2", …
 
 ## Dev Notes
 
@@ -165,6 +171,7 @@ GDK_BACKEND=x11 npm run dev
 # in another terminal, once the app window is open and showing what you want:
 npm run screenshot -- local
 npm run screenshot -- youtube
+npm run screenshot -- cd
 ```
 
 ### Cutting a release
