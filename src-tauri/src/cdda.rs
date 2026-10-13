@@ -57,14 +57,18 @@ const READ_TOC_CDB: [u8; 10] = [
 
 /// `READ CD` (opcode 0xBE): CD-DA sector type, user data only, so each
 /// returned sector is exactly the raw 2352-byte frame already on the disc.
-fn read_cd_cdb(start_lba: u32, sector_count: u32) -> [u8; 12] {
+/// Unlike `READ_TOC_CDB`, this genuinely differs per call — it names where
+/// and how much to read — so it stays a function, not a constant.
+fn build_read_cd_cdb(start_lba: u32, sector_count: u32) -> [u8; 12] {
+    const EXPECTED_SECTOR_TYPE_CDDA: u8 = 1 << 2;
+    const USER_DATA_ONLY: u8 = 0x10;
+
     let mut cdb = [0u8; 12];
     cdb[0] = 0xBE;
-    cdb[1] = 1 << 2; // expected sector type = CD-DA
+    cdb[1] = EXPECTED_SECTOR_TYPE_CDDA;
     cdb[2..6].copy_from_slice(&start_lba.to_be_bytes());
-    let len = sector_count.to_be_bytes();
-    cdb[6..9].copy_from_slice(&len[1..4]); // 3-byte big-endian transfer length
-    cdb[9] = 0x10; // bit 4: return user data only
+    cdb[6..9].copy_from_slice(&sector_count.to_be_bytes()[1..4]); // 3-byte big-endian transfer length
+    cdb[9] = USER_DATA_ONLY;
     cdb
 }
 
@@ -168,7 +172,7 @@ pub fn read_toc(device: &str) -> Result<Toc, String> {
 }
 
 pub fn read_sectors(device: &str, start_lba: u32, count: u32) -> Result<Vec<u8>, String> {
-    let cdb = read_cd_cdb(start_lba, count);
+    let cdb = build_read_cd_cdb(start_lba, count);
     platform::send_scsi(device, &cdb, (count * SECTOR_BYTES) as usize)
 }
 
@@ -235,8 +239,8 @@ mod tests {
     }
 
     #[test]
-    fn builds_read_cd_cdb() {
-        let cdb = read_cd_cdb(0x0001_0203, 5);
+    fn read_cd_cdb_names_the_start_and_length_requested() {
+        let cdb = build_read_cd_cdb(0x0001_0203, 5);
         assert_eq!(cdb[0], 0xBE);
         assert_eq!(&cdb[2..6], &[0x00, 0x01, 0x02, 0x03]);
         assert_eq!(&cdb[6..9], &[0x00, 0x00, 0x05]);
