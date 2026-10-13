@@ -25,9 +25,11 @@ pub struct DriveInfo {
     pub id: String,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct CdTrack {
+/// A track's position within the disc's table of contents — sector bounds
+/// and nothing else, never sent over IPC as-is. `lib.rs::CdTrack` is the
+/// frontend-facing shape built from this.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TocTrack {
     pub track_no: u32,
     pub start_lba: u32,
     /// Exclusive — the next track's start, or the lead-out for the last track.
@@ -35,9 +37,9 @@ pub struct CdTrack {
     pub duration: f64,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Toc {
-    pub tracks: Vec<CdTrack>,
+    pub tracks: Vec<TocTrack>,
 }
 
 /// The Command Descriptor Block for `READ TOC/PMA/ATIP`.
@@ -108,7 +110,7 @@ pub fn parse_toc(data: &[u8]) -> Result<Toc, String> {
             continue; // malformed response: a real track with no boundary after it
         };
         let sectors = end_lba.saturating_sub(start_lba);
-        tracks.push(CdTrack {
+        tracks.push(TocTrack {
             track_no: track_no as u32,
             start_lba,
             end_lba,
@@ -202,8 +204,8 @@ mod tests {
         assert_eq!(
             toc.tracks,
             vec![
-                CdTrack { track_no: 1, start_lba: 0, end_lba: 21_000, duration: 21_000.0 / 75.0 },
-                CdTrack { track_no: 2, start_lba: 21_000, end_lba: 45_000, duration: 24_000.0 / 75.0 },
+                TocTrack { track_no: 1, start_lba: 0, end_lba: 21_000, duration: 21_000.0 / 75.0 },
+                TocTrack { track_no: 2, start_lba: 21_000, end_lba: 45_000, duration: 24_000.0 / 75.0 },
             ]
         );
     }

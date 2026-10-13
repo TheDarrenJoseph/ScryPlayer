@@ -174,20 +174,12 @@ fn media_server_port(app: AppHandle) -> u16 {
     app.state::<MediaServer>().port
 }
 
-/// A CD track as the frontend queue understands tracks.
-///
-/// No real tags exist on a disc, so `title` is just a TOC-derived
-/// placeholder; artist and album arrive later, if at all, from
-/// `lookup_cd_metadata` — never from here, so they have no place in this
-/// shape. Every field that *is* here is one the TOC genuinely gives a real
-/// value for, unlike `media::Track`'s shape this otherwise mirrors: a CD
-/// track is never `playable: false` (there's no decode failure to have),
-/// so that field is gone too, and `duration` is a plain `f64` rather than
-/// `Option<f64>` since the TOC can't fail to supply it the way a missing
-/// tag can for a local file.
+/// A track as read straight from the disc's table of contents — no tags, so
+/// `title` is just a placeholder ("Track 1", "Track 2", …); real metadata,
+/// when there is any, arrives separately from `lookup_cd_metadata`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CdTrackDto {
+struct CdTrack {
     drive: String,
     track_no: u32,
     start_lba: u32,
@@ -204,12 +196,12 @@ fn list_cd_drives() -> Vec<DriveInfo> {
 
 /// Read `drive`'s table of contents and report its audio tracks.
 #[tauri::command]
-fn scan_cd(drive: String) -> Result<Vec<CdTrackDto>, String> {
+fn scan_cd(drive: String) -> Result<Vec<CdTrack>, String> {
     let toc = cdda::read_toc(&drive)?;
     Ok(toc
         .tracks
         .into_iter()
-        .map(|t| CdTrackDto {
+        .map(|t| CdTrack {
             drive: drive.clone(),
             track_no: t.track_no,
             start_lba: t.start_lba,
@@ -236,29 +228,6 @@ fn cd_track_url(app: AppHandle, drive: String, start_lba: u32, end_lba: u32) -> 
     )
 }
 
-/// Artist, album and real track titles for a disc, from GnuDB — never
-/// anything read off the disc itself, which carries no text metadata at all.
-/// `None` covers every reason there might be nothing to show (offline, no
-/// match, a malformed reply); the TOC-only "Track N" placeholders from
-/// `scan_cd` are always a fine fallback.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CdMetadataDto {
-    artist: Option<String>,
-    album: Option<String>,
-    track_titles: Vec<String>,
-}
-
-impl From<cddb::CdMetadata> for CdMetadataDto {
-    fn from(meta: cddb::CdMetadata) -> Self {
-        CdMetadataDto {
-            artist: meta.artist,
-            album: meta.album,
-            track_titles: meta.track_titles,
-        }
-    }
-}
-
 fn cddb_cache_path(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_cache_dir().ok().map(|d| d.join("cddb_cache.json"))
 }
@@ -267,14 +236,14 @@ fn cddb_cache_path(app: &AppHandle) -> Option<PathBuf> {
 /// public server, and a disc's metadata never changes, so a disc already
 /// looked up (this session or a previous one) must not be asked again.
 #[tauri::command]
-fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<CdMetadataDto> {
+fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<cddb::CdMetadata> {
     let toc = cdda::read_toc(&drive).ok()?;
     let id = cddb::discid(&toc);
     let cache_path = cddb_cache_path(&app);
 
     if let Some(path) = &cache_path {
         if let Some(cached) = cddb_cache::get(path, id) {
-            return cached.map(CdMetadataDto::from);
+            return cached;
         }
     }
 
@@ -282,7 +251,7 @@ fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<CdMetadataDto> {
     if let Some(path) = &cache_path {
         cddb_cache::put(path, id, meta.as_ref());
     }
-    meta.map(CdMetadataDto::from)
+    meta
 }
 
 /// Forget every cached GnuDB lookup, so the next scan of each disc asks

@@ -35,10 +35,10 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// nothing in the protocol needs it to name the real machine or user.
 const HELLO: &str = "scryplayer localhost ScryPlayer";
 
-/// `Serialize`/`Deserialize` so `cddb_cache.rs` can write this straight to
-/// disk — a disc's metadata does not change, so the cached form is exactly
-/// the looked-up form, no separate storage shape needed.
+/// Artist, album and real track titles for a disc, from GnuDB. Both the
+/// `lookup_cd_metadata` IPC reply and the on-disk cache shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CdMetadata {
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -259,7 +259,7 @@ pub fn lookup(toc: &Toc) -> Option<CdMetadata> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cdda::CdTrack;
+    use crate::cdda::TocTrack;
 
     /// A real disc's frame offsets (from the CDDB reference tooling's own
     /// documented example), with the disc ID verified independently by
@@ -272,10 +272,10 @@ mod tests {
             150u32, 28_690, 51_102, 75_910, 102_682, 121_522, 149_040, 175_772, 204_387, 231_145,
             268_065,
         ];
-        let mut tracks: Vec<CdTrack> = starts
+        let mut tracks: Vec<TocTrack> = starts
             .iter()
             .enumerate()
-            .map(|(i, &fo)| CdTrack {
+            .map(|(i, &fo)| TocTrack {
                 track_no: i as u32 + 1,
                 start_lba: fo - 150,
                 end_lba: 0, // filled in below except for the last track
