@@ -1,21 +1,10 @@
 //! GnuDB (classic CDDBP protocol) disc-metadata lookup.
 //!
-//! The disc ID checksum and response parsing are pure functions,
-//! unit-testable without a network. Only `lookup` touches the network,
-//! tying together one handshake and two commands (`query` then `read`)
-//! over a single connection.
-//!
 //! A Red Book audio CD carries no text metadata at all — this is purely a
 //! lookup against GnuDB's database, keyed by a checksum of the disc's TOC.
-//! Doing this from Rust rather than the frontend isn't a style choice: the
-//! live service speaks the classic protocol over a raw TCP socket, with a
-//! stateful `hello` handshake before anything else — not HTTP at all, so
-//! there is no `fetch()`-shaped way to reach it from a WebView regardless of
-//! CORS or CSP. (An HTTP-over-CGI gateway used to exist for exactly this
-//! reason, and is what an earlier version of this module targeted, but it no
-//! longer responds — verified by hand against the real server before writing
-//! this version, the same way the disc-ID algorithm itself was verified
-//! against the real `libcddb` rather than trusted from documentation.)
+//! It runs from Rust because the live service speaks the protocol over a
+//! raw TCP socket with a stateful `hello` handshake — not HTTP, so there is
+//! no `fetch()`-shaped way to reach it from a WebView.
 //!
 //! Callers should go through `cddb_cache` rather than `lookup` directly —
 //! GnuDB is a shared public server, and a disc's metadata is immutable, so
