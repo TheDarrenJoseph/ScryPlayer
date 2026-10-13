@@ -32,8 +32,8 @@ Switch between them with the picker at the top.
 
 ## Example Screenshots
 
-![Embedded YouTube player example](images/example_youtube_screenshot.png)
 ![Local music player example](images/example_local_screenshot.png)
+![Embedded YouTube player example](images/example_youtube_screenshot.png)
 ![Audio CD example](images/example_cd_screenshot.png)
 
 
