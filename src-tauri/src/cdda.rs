@@ -41,18 +41,19 @@ pub struct Toc {
     pub tracks: Vec<CdTrack>,
 }
 
-/// `READ TOC/PMA/ATIP` (opcode 0x43), format 0 (plain TOC), LBA addressing.
-fn read_toc_cdb() -> [u8; 10] {
-    let mut cdb = [0u8; 10];
-    cdb[0] = 0x43;
-    // Byte 1 bit 1 (MSF) left clear: addresses come back as LBA, not MSF.
-    // Byte 2 low nibble (format) left at 0: plain TOC.
-    cdb[6] = 1; // starting track number
-    let alloc_len: u16 = 1024; // comfortably more than any real disc's TOC
-    cdb[7] = (alloc_len >> 8) as u8;
-    cdb[8] = (alloc_len & 0xff) as u8;
-    cdb
-}
+/// `READ TOC/PMA/ATIP` (opcode 0x43), format 0 (plain TOC), LBA addressing:
+/// always the same bytes, since it always asks for the same thing — every
+/// track starting from track 1, with a 1024-byte allocation comfortably
+/// bigger than any real disc's TOC.
+const READ_TOC_CDB: [u8; 10] = [
+    0x43, // opcode: READ TOC/PMA/ATIP
+    0x00, // MSF bit clear: addresses come back as LBA, not MSF
+    0x00, // format nibble: plain TOC
+    0x00, 0x00, 0x00, // reserved
+    0x01, // starting track number
+    0x04, 0x00, // allocation length = 1024, big-endian
+    0x00, // control
+];
 
 /// `READ CD` (opcode 0xBE): CD-DA sector type, user data only, so each
 /// returned sector is exactly the raw 2352-byte frame already on the disc.
@@ -162,8 +163,7 @@ pub fn list_drives() -> Vec<DriveInfo> {
 }
 
 pub fn read_toc(device: &str) -> Result<Toc, String> {
-    let cdb = read_toc_cdb();
-    let data = platform::send_scsi(device, &cdb, 1024)?;
+    let data = platform::send_scsi(device, &READ_TOC_CDB, 1024)?;
     parse_toc(&data)
 }
 
@@ -244,10 +244,9 @@ mod tests {
     }
 
     #[test]
-    fn builds_read_toc_cdb() {
-        let cdb = read_toc_cdb();
-        assert_eq!(cdb[0], 0x43);
-        assert_eq!(cdb[6], 1);
-        assert_eq!(&cdb[7..9], &[0x04, 0x00]); // 1024, big-endian
+    fn read_toc_cdb_asks_for_every_track_with_room_for_a_real_toc() {
+        assert_eq!(READ_TOC_CDB[0], 0x43);
+        assert_eq!(READ_TOC_CDB[6], 1);
+        assert_eq!(&READ_TOC_CDB[7..9], &[0x04, 0x00]); // 1024, big-endian
     }
 }
