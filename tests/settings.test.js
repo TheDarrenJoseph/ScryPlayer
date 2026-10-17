@@ -59,7 +59,13 @@ beforeEach(() => {
   clearCddbCacheImpl = async () => {};
 });
 
-const ALL_ON = { restoreSession: true, water: true, cddbLookup: true, albumArtLookup: true };
+const ALL_ON = {
+  restoreSession: true,
+  water: true,
+  cddbLookup: true,
+  albumArtLookup: true,
+  localAlbumInfoLookup: true,
+};
 
 describe('loadSettings', () => {
   it('defaults to how the app behaved before the dialog existed', () => {
@@ -151,12 +157,21 @@ describe('createSettings', () => {
 
   describe('the switches', () => {
     it('start from the values it was given', () => {
-      setup(JSON.stringify({ restoreSession: false, water: true, cddbLookup: false, albumArtLookup: false }));
+      setup(
+        JSON.stringify({
+          restoreSession: false,
+          water: true,
+          cddbLookup: false,
+          albumArtLookup: false,
+          localAlbumInfoLookup: false,
+        }),
+      );
 
       assert.equal($('set-restore').checked, false);
       assert.equal($('set-water').checked, true);
       assert.equal($('set-cddb-lookup').checked, false);
       assert.equal($('set-album-art-lookup').checked, false);
+      assert.equal($('set-local-album-info-lookup').checked, false);
     });
 
     it('report and persist a change', () => {
@@ -194,6 +209,16 @@ describe('createSettings', () => {
 
       assert.deepEqual(values, { ...ALL_ON, albumArtLookup: false });
       assert.deepEqual(loadSettings(), { ...ALL_ON, albumArtLookup: false });
+    });
+
+    it('persists the local album info lookup switch independently of the CD one', () => {
+      const { values } = setup();
+
+      toggle('set-local-album-info-lookup', false);
+
+      assert.deepEqual(values, { ...ALL_ON, localAlbumInfoLookup: false });
+      assert.deepEqual(loadSettings(), { ...ALL_ON, localAlbumInfoLookup: false });
+      assert.equal($('set-album-art-lookup').checked, true, 'the CD switch is untouched');
     });
 
     it('survives a reload', () => {
@@ -256,7 +281,7 @@ describe('createSettings', () => {
     });
   });
 
-  describe('clearing the cached CD info', () => {
+  describe('clearing the cached album info', () => {
     it('asks the caller and says so in the dialog', async () => {
       let asked = false;
       clearCddbCacheImpl = async () => {
@@ -269,7 +294,7 @@ describe('createSettings', () => {
       await settle();
 
       assert.equal(asked, true);
-      assert.equal($('settings-note').textContent, 'Cleared cached CD info and art.');
+      assert.equal($('settings-note').textContent, 'Cleared cached album info.');
     });
 
     it('says so when it fails, rather than throwing', async () => {
@@ -282,7 +307,7 @@ describe('createSettings', () => {
       click($('btn-clear-cddb-cache'));
       await settle();
 
-      assert.equal($('settings-note').textContent, 'Could not clear the cached CD info and art.');
+      assert.equal($('settings-note').textContent, 'Could not clear the cached album info.');
     });
 
     it('does not disturb the settings themselves', async () => {

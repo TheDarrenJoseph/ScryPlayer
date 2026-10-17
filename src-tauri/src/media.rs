@@ -53,6 +53,9 @@ pub struct Track {
     pub playable: bool,
     /// A sibling `cover.{jpg,jpeg,png}` in the track's own folder, if any.
     pub art: Option<String>,
+    /// The file's own embedded MusicBrainz Release ID tag, if any — written
+    /// by taggers like Picard, and an exact key for looking the release up.
+    pub release_id: Option<String>,
 }
 
 fn ext_lower(path: &Path) -> Option<String> {
@@ -159,6 +162,7 @@ pub fn read_track(path: &Path) -> Track {
         disc_no: None,
         playable: is_playable(path),
         art: path.parent().and_then(find_cover_image).map(|p| to_string_path(&p)),
+        release_id: None,
     };
 
     let Ok(tagged) = lofty::read_from_path(path) else {
@@ -189,6 +193,10 @@ pub fn read_track(path: &Path) -> Track {
         .filter(|a| !a.is_empty());
     track.track_no = tag.track();
     track.disc_no = tag.disk();
+    track.release_id = tag
+        .get_string(ItemKey::MusicBrainzReleaseId)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
 
     track
 }

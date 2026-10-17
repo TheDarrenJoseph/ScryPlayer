@@ -1,5 +1,5 @@
 import { Emitter } from '../core/emitter.js';
-import { artUrl, mediaUrl } from '../tauri.js';
+import { artUrl, lookupLocalAlbumInfo, mediaUrl } from '../tauri.js';
 
 /**
  * Describe a decode failure.
@@ -29,13 +29,15 @@ function describeDecodeError(code, name) {
 export class LocalAdapter extends Emitter {
   #el;
   #track = null;
+  #settings;
   /** Guards against a slow load resolving after a newer one started. */
   #loadToken = 0;
   /** The load token we have already reported a failure for. */
   #reportedFor = -1;
 
-  constructor() {
+  constructor({ settings } = {}) {
     super();
+    this.#settings = settings;
 
     const el = new Audio();
     // Buffer ahead rather than fetching lazily; measured to reach
@@ -111,6 +113,35 @@ export class LocalAdapter extends Emitter {
         .then((resolved) => {
           if (token !== this.#loadToken) return;
           this.emit('meta', { artUrl: resolved });
+        })
+        .catch(() => {});
+    }
+
+    // Same shape again, for MusicBrainz release info — only runs when the
+    // setting allows it, and there's a release id or an artist/album pair
+    // to key the lookup on at all.
+    if (this.#settings?.localAlbumInfoLookup && (track.releaseId || (track.artist && track.album))) {
+      lookupLocalAlbumInfo(track.releaseId ?? null, track.artist ?? '', track.album ?? '')
+        .then(async (info) => {
+          if (!info || token !== this.#loadToken) return;
+
+          const patch = {};
+          // The folder's own `cover.jpg` (resolved above, if any) takes
+          // priority over a MusicBrainz-sourced image.
+          if (info.art && !track.art) patch.artUrl = await artUrl(info.art);
+          if (info.country || info.date || info.releaseUrl) {
+            patch.albumInfo = {
+              country: info.country,
+              date: info.date,
+              asin: info.asin,
+              releaseUrl: info.releaseUrl,
+              tocUrl: info.tocUrl,
+              trackCount: info.trackCount,
+            };
+          }
+
+          if (token !== this.#loadToken) return; // the artUrl() above may have gone stale
+          if (Object.keys(patch).length) this.emit('meta', patch);
         })
         .catch(() => {});
     }

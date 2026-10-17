@@ -57,7 +57,7 @@ function main() {
   const youtubeQueue = new Queue('youtube');
   const cdQueue = new Queue('cd');
 
-  controller.register('local', new LocalAdapter(), localQueue);
+  controller.register('local', new LocalAdapter({ settings }), localQueue);
   controller.register(
     'youtube',
     new YouTubeBridgeAdapter(document.getElementById('yt-mount')),
@@ -68,7 +68,7 @@ function main() {
   createTransport(controller);
   const localPanel = createLocalPanel(controller, localQueue, { setStatus });
   createYouTubePanel(controller, youtubeQueue, { setStatus });
-  createCdPanel(controller, cdQueue, { setStatus, settings });
+  const cdPanel = createCdPanel(controller, cdQueue, { setStatus, settings });
 
   // Both panels clear the same way; each button names the queue it empties.
   for (const button of document.querySelectorAll('.btn-clear-playlist')) {
@@ -87,11 +87,16 @@ function main() {
   if (settings.restoreSession) {
     if (saved.localQueue) localQueue.restore(saved.localQueue);
     if (saved.youtubeQueue) youtubeQueue.restore(saved.youtubeQueue);
-    if (saved.cdQueue) cdQueue.restore(saved.cdQueue);
+    if (saved.cdQueue) {
+      cdQueue.restore(saved.cdQueue);
+      cdPanel.enrichRestored();
+    }
 
     // Asset-scope grants do not survive a restart, so restored local tracks
-    // have to be re-granted before anything tries to play them.
-    const restored = localQueue.items.map((t) => t.path).filter(Boolean);
+    // have to be re-granted before anything tries to play them — the art
+    // path too, not just the audio file, or a restored track's own folder
+    // cover is permanently unreachable until the folder is re-added.
+    const restored = localQueue.items.flatMap((t) => [t.path, t.art]).filter(Boolean);
     if (restored.length) {
       invoke('grant_paths', { paths: restored }).catch((err) => {
         setStatus(`Could not restore access to the previous queue: ${err}`, true);

@@ -6,6 +6,8 @@
  * also forget that the listener asked never to restore one.
  */
 
+import { closeOnBackdropClick } from './dom.js';
+
 const STORE_KEY = 'scry.settings.v1';
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +23,11 @@ export const DEFAULTS = {
   // default for the same reason, but it sends real text rather than a
   // checksum, to a second service.
   albumArtLookup: true,
+  // A separate switch from `albumArtLookup`: local files carry their own
+  // artist/album tags already, so this needs no other lookup to depend on,
+  // and a listener may want MusicBrainz asked for one source but not the
+  // other.
+  localAlbumInfoLookup: true,
 };
 
 /** Read the saved settings, falling back per-field so a partial save is fine. */
@@ -39,6 +46,7 @@ export function loadSettings() {
     water: pick('water'),
     cddbLookup: pick('cddbLookup'),
     albumArtLookup: pick('albumArtLookup'),
+    localAlbumInfoLookup: pick('localAlbumInfoLookup'),
   };
 }
 
@@ -59,7 +67,7 @@ function save(values) {
  * @param {(values: object) => void} handlers.onChange after any setting changes
  * @param {() => void} handlers.onForget the saved session should be discarded
  * @param {() => Promise<void>} handlers.onClearCddbCache the cached GnuDB
- *   lookups and cached cover art should be discarded
+ *   lookups and cached album info (CD and local alike) should be discarded
  */
 export function createSettings(values, { onChange, onForget, onClearCddbCache }) {
   const dialog = $('settings-dialog');
@@ -68,11 +76,13 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
   const water = $('set-water');
   const cddbLookup = $('set-cddb-lookup');
   const albumArtLookup = $('set-album-art-lookup');
+  const localAlbumInfoLookup = $('set-local-album-info-lookup');
 
   restore.checked = values.restoreSession;
   water.checked = values.water;
   cddbLookup.checked = values.cddbLookup;
   albumArtLookup.checked = values.albumArtLookup;
+  localAlbumInfoLookup.checked = values.localAlbumInfoLookup;
 
   function update(key, on) {
     values[key] = on;
@@ -86,6 +96,9 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
   albumArtLookup.addEventListener('change', () =>
     update('albumArtLookup', albumArtLookup.checked),
   );
+  localAlbumInfoLookup.addEventListener('change', () =>
+    update('localAlbumInfoLookup', localAlbumInfoLookup.checked),
+  );
 
   $('btn-forget').addEventListener('click', () => {
     onForget();
@@ -96,9 +109,9 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
   $('btn-clear-cddb-cache').addEventListener('click', async () => {
     try {
       await onClearCddbCache();
-      note.textContent = 'Cleared cached CD info and art.';
+      note.textContent = 'Cleared cached album info.';
     } catch {
-      note.textContent = 'Could not clear the cached CD info and art.';
+      note.textContent = 'Could not clear the cached album info.';
     }
   });
 
@@ -109,16 +122,7 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
 
   $('btn-settings-close').addEventListener('click', () => dialog.close());
 
-  // A native dialog fills its backdrop with the dialog element itself, so a
-  // click lands on the dialog whether or not it hit the panel. Compare against
-  // the box to tell the two apart.
-  dialog.addEventListener('click', (e) => {
-    if (e.target !== dialog) return;
-    const box = dialog.getBoundingClientRect();
-    const outside =
-      e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom;
-    if (outside) dialog.close();
-  });
+  closeOnBackdropClick(dialog);
 
   return {
     open: () => dialog.showModal(),

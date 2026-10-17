@@ -57,6 +57,7 @@ let adapter;
 let queue;
 let status;
 let settings;
+let cdPanel;
 
 beforeEach(() => {
   document.body.innerHTML = MARKUP;
@@ -65,7 +66,7 @@ beforeEach(() => {
     list_cd_drives: () => [DRIVE],
     scan_cd: () => [cdTrack(), cdTrack({ trackNo: 2, title: 'Track 2', startLba: 21_000, endLba: 45_000 })],
     lookup_cd_metadata: () => null,
-    lookup_album_art: () => null,
+    lookup_album_info: () => null,
     art_url: (args) => `http://127.0.0.1:1234/art?token=abc&path=${encodeURIComponent(args.path)}`,
   };
 
@@ -76,7 +77,7 @@ beforeEach(() => {
   settings = { cddbLookup: true, albumArtLookup: true };
 
   controller.register('cd', adapter, queue);
-  createCdPanel(controller, queue, {
+  cdPanel = createCdPanel(controller, queue, {
     setStatus: (message, isError = false) => status.push({ message, isError }),
     settings,
   });
@@ -217,21 +218,24 @@ describe('createCdPanel', () => {
     });
   });
 
-  describe('cover art enrichment', () => {
+  describe('album info enrichment', () => {
+    const NO_INFO = { art: null, country: null, date: null, asin: null, releaseUrl: null, tocUrl: null };
+
     beforeEach(() => {
       bridge.handlers.lookup_cd_metadata = () => ({
         artist: 'Fleetwood Mac',
         album: 'Rumours',
         trackTitles: ['Second Hand News', 'Dreams'],
       });
+      bridge.handlers.lookup_album_info = () => NO_INFO;
     });
 
     it('resolves a shared artUrl onto every track from the disc', async () => {
-      bridge.handlers.lookup_album_art = () => '/cache/album_art/abc123.jpg';
+      bridge.handlers.lookup_album_info = () => ({ ...NO_INFO, art: '/cache/album_art/abc123.jpg' });
 
       await scan();
 
-      const call = bridge.calls.find((c) => c.command === 'lookup_album_art');
+      const call = bridge.calls.find((c) => c.command === 'lookup_album_info');
       assert.deepEqual(call.args, { drive: '/dev/sr0', artist: 'Fleetwood Mac', album: 'Rumours' });
 
       assert.match(queue.items[0].artUrl, /abc123\.jpg/);
@@ -239,34 +243,61 @@ describe('createCdPanel', () => {
     });
 
     it('leaves artUrl unset when no cover art is found', async () => {
-      bridge.handlers.lookup_album_art = () => null;
-
       await scan();
 
       assert.equal(queue.items[0].artUrl, undefined);
     });
 
-    it('never asks for art when the setting is off', async () => {
-      settings.albumArtLookup = false;
-      bridge.handlers.lookup_album_art = () => '/cache/album_art/abc123.jpg';
+    it('attaches country, date, asin, links and track count from an exact disc match', async () => {
+      bridge.handlers.lookup_album_info = () => ({
+        art: null,
+        country: 'GB',
+        date: '2010-05-10',
+        asin: 'B003D7F33Q',
+        releaseUrl: 'https://musicbrainz.org/release/507b4cda-bebd-468e-a1fc-f8873f162f67',
+        tocUrl: 'https://musicbrainz.org/cdtoc/F5gDrr2p.IMUvUxfNSc884xb.pc-',
+      });
 
       await scan();
 
-      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_album_art'));
+      assert.deepEqual(queue.items[0].albumInfo, {
+        country: 'GB',
+        date: '2010-05-10',
+        asin: 'B003D7F33Q',
+        releaseUrl: 'https://musicbrainz.org/release/507b4cda-bebd-468e-a1fc-f8873f162f67',
+        tocUrl: 'https://musicbrainz.org/cdtoc/F5gDrr2p.IMUvUxfNSc884xb.pc-',
+        trackCount: 2,
+      });
+      assert.deepEqual(queue.items[1].albumInfo, queue.items[0].albumInfo, 'one album info for the whole disc');
     });
 
-    it('never asks for art when GnuDB has no match to search by', async () => {
-      bridge.handlers.lookup_cd_metadata = () => null;
-      bridge.handlers.lookup_album_art = () => '/cache/album_art/abc123.jpg';
+    it('leaves albumInfo unset when only a fallback cover came back', async () => {
+      bridge.handlers.lookup_album_info = () => ({ ...NO_INFO, art: '/cache/album_art/abc123.jpg' });
 
       await scan();
 
-      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_album_art'));
+      assert.equal(queue.items[0].albumInfo, undefined);
+    });
+
+    it('never asks for album info when the setting is off', async () => {
+      settings.albumArtLookup = false;
+
+      await scan();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_album_info'));
+    });
+
+    it('never asks for album info when GnuDB has no match to search by', async () => {
+      bridge.handlers.lookup_cd_metadata = () => null;
+
+      await scan();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_album_info'));
     });
 
     it('ignores a late answer after the disc was rescanned', async () => {
-      let resolveArt;
-      bridge.handlers.lookup_album_art = () => new Promise((r) => (resolveArt = r));
+      let resolveInfo;
+      bridge.handlers.lookup_album_info = () => new Promise((r) => (resolveInfo = r));
 
       await scan();
 
@@ -274,7 +305,7 @@ describe('createCdPanel', () => {
       bridge.handlers.lookup_cd_metadata = () => null;
       await scan();
 
-      resolveArt('/cache/album_art/stale.jpg');
+      resolveInfo({ ...NO_INFO, art: '/cache/album_art/stale.jpg' });
       await settle();
 
       assert.equal(queue.items[0].artUrl, undefined, 'the stale lookup did not land on the new disc');
@@ -313,6 +344,41 @@ describe('createCdPanel', () => {
 
       assert.equal(queue.length, 1);
       assert.equal(adapter.loadedTrack.title, 'Track 2', 'playback followed the removal');
+    });
+  });
+
+  describe('enrichRestored', () => {
+    it('re-runs enrichment for a queue restored from a saved session', async () => {
+      queue.restore({ items: [cdTrack(), cdTrack({ trackNo: 2, title: 'Track 2' })], index: -1 });
+      bridge.handlers.lookup_cd_metadata = () => ({
+        artist: 'Fleetwood Mac',
+        album: 'Rumours',
+        trackTitles: ['Second Hand News', 'Dreams'],
+      });
+
+      cdPanel.enrichRestored();
+      await settle();
+
+      const call = bridge.calls.find((c) => c.command === 'lookup_cd_metadata');
+      assert.deepEqual(call.args, { drive: '/dev/sr0' });
+      assert.equal(queue.items[0].title, 'Second Hand News');
+    });
+
+    it('does nothing when the queue is empty', async () => {
+      cdPanel.enrichRestored();
+      await settle();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_cd_metadata'));
+    });
+
+    it('does nothing when the GnuDB setting is off', async () => {
+      queue.restore({ items: [cdTrack()], index: -1 });
+      settings.cddbLookup = false;
+
+      cdPanel.enrichRestored();
+      await settle();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_cd_metadata'));
     });
   });
 });

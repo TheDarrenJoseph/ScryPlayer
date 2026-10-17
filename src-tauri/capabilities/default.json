@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissions for the Scry Player main window. File dialogs are opened from Rust, so the frontend needs no dialog permissions of its own.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "shell:allow-open"]
 }

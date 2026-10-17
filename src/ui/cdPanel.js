@@ -1,4 +1,4 @@
-import { artUrl, listCdDrives, lookupAlbumArt, lookupCdMetadata, scanCd } from '../tauri.js';
+import { artUrl, listCdDrives, lookupAlbumInfo, lookupCdMetadata, scanCd } from '../tauri.js';
 import { renderQueue } from './queueList.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,8 +16,8 @@ const asMessage = (err, fallback) => (typeof err === 'string' ? err : (err?.mess
  * A scan's TOC-only "Track N" titles are enriched in the background from
  * GnuDB, when the setting allows it — the same shape as how YouTube's real
  * title arrives after `youtubePanel.js` queues its placeholder. Cover art
- * follows the same shape again, chained off whatever artist/album GnuDB
- * found, when that setting allows it too.
+ * and MusicBrainz release info follow the same shape again, chained off
+ * whatever artist/album GnuDB found, when that setting allows it too.
  */
 export function createCdPanel(controller, queue, { setStatus, settings }) {
   const queueEl = $('queue-cd');
@@ -103,32 +103,46 @@ export function createCdPanel(controller, queue, { setStatus, settings }) {
 
       queue.emit('change', queue);
 
-      // Needs an artist and album to search by — GnuDB having nothing for
-      // this disc leaves nothing to look cover art up with either.
+      // Needs an artist and album to search by, at minimum as a cover-art
+      // fallback — GnuDB having nothing for this disc leaves nothing to ask
+      // MusicBrainz's text search with either.
       if (settings.albumArtLookup && info.artist && info.album) {
-        enrichArt(drive, queuedTracks, info.artist, info.album);
+        enrichAlbumInfo(drive, queuedTracks, info.artist, info.album);
       }
     });
   }
 
   /**
-   * Same shape as `enrich`'s metadata patch, for the album's cover: resolve
-   * it once in the background and fan it out to every track from this disc.
+   * Same shape as `enrich`'s metadata patch, for the album's cover and
+   * MusicBrainz info: resolve it once in the background and fan it out to
+   * every track from this disc, since they all share one album.
    */
-  function enrichArt(drive, queuedTracks, artist, album) {
-    lookupAlbumArt(drive, artist, album)
-      .then((path) => (path ? artUrl(path) : null))
-      .then((url) => {
-        if (!url) return;
+  function enrichAlbumInfo(drive, queuedTracks, artist, album) {
+    lookupAlbumInfo(drive, artist, album)
+      .then(async (info) => {
+        if (!info) return;
+
+        const url = info.art ? await artUrl(info.art) : null;
+        const hasReleaseInfo = info.country || info.date || info.releaseUrl;
 
         for (const track of queuedTracks) {
           if (!queue.items.includes(track)) continue;
-          track.artUrl = url;
+          if (url) track.artUrl = url;
+          if (hasReleaseInfo) {
+            track.albumInfo = {
+              country: info.country,
+              date: info.date,
+              asin: info.asin,
+              releaseUrl: info.releaseUrl,
+              tocUrl: info.tocUrl,
+              trackCount: queuedTracks.length,
+            };
+          }
         }
 
         queue.emit('change', queue);
       })
-      .catch(() => {}); // A missing cover must not surface as an error.
+      .catch(() => {}); // A missing cover/info must not surface as an error.
   }
 
   scanBtn.addEventListener('click', scan);
@@ -138,4 +152,19 @@ export function createCdPanel(controller, queue, { setStatus, settings }) {
   controller.on('source', paintQueue);
 
   paintQueue();
+
+  return {
+    /**
+     * Re-run the same background enrichment a scan already does, for a queue
+     * that was restored from a previous session rather than just scanned —
+     * title/artist/album and cover art/MusicBrainz info may never have
+     * finished resolving before the app closed last time, and nothing else
+     * gives them a second chance. Call after `queue.restore(...)`.
+     */
+    enrichRestored() {
+      const drive = queue.items[0]?.drive;
+      if (!drive || !settings.cddbLookup) return;
+      enrich(drive, queue.items);
+    },
+  };
 }

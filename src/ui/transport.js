@@ -1,5 +1,54 @@
 import { thumbnailFor } from '../sources/youtube.js';
+import { openExternal } from '../tauri.js';
+import { closeOnBackdropClick } from './dom.js';
 import { formatTime, joinMeta } from '../util/format.js';
+
+/** A link that opens in the user's default browser, not the app's own webview. */
+function externalLink(label, url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.textContent = label;
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    openExternal(url).catch(() => {});
+  });
+  return a;
+}
+
+/**
+ * "Album · Artist · Country · Date · N tracks · ASIN B003D7F33Q
+ * (MusicBrainz: TOC · Release)" — built from DOM nodes, never `innerHTML`:
+ * everything but the static labels is external data (GnuDB or MusicBrainz),
+ * so it goes through `textContent` the same as everywhere else in this app.
+ * "MusicBrainz" itself is plain text, not a link — it only names where the
+ * TOC/Release links beside it lead.
+ */
+function renderCaption(container, { album, artist, albumInfo }) {
+  container.replaceChildren();
+
+  const parts = [album, artist];
+  if (albumInfo) {
+    parts.push(albumInfo.country, albumInfo.date);
+    if (albumInfo.trackCount) {
+      parts.push(`${albumInfo.trackCount} track${albumInfo.trackCount === 1 ? '' : 's'}`);
+    }
+    if (albumInfo.asin) parts.push(`ASIN ${albumInfo.asin}`);
+  }
+  container.appendChild(document.createTextNode(parts.filter(Boolean).join(' · ')));
+
+  const links = [
+    albumInfo?.tocUrl && externalLink('TOC', albumInfo.tocUrl),
+    albumInfo?.releaseUrl && externalLink('Release', albumInfo.releaseUrl),
+  ].filter(Boolean);
+  if (!links.length) return;
+
+  container.appendChild(document.createTextNode(' (MusicBrainz: '));
+  links.forEach((link, i) => {
+    if (i) container.appendChild(document.createTextNode(' · '));
+    container.appendChild(link);
+  });
+  container.appendChild(document.createTextNode(')'));
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,11 +78,19 @@ export function createTransport(controller) {
   const npTitle = $('np-title');
   const npSub = $('np-sub');
   const npArt = $('np-art');
+  const artDialog = $('art-dialog');
+  const artDialogImage = $('art-dialog-image');
+  const artDialogCaption = $('art-dialog-caption');
+  const artMaximizeBtn = $('btn-art-maximize');
 
   // While the user drags the seek bar, incoming time updates must not fight
   // them for the handle.
   let scrubbing = false;
   let duration = 0;
+
+  // What the art button would open, kept alongside the track so the click
+  // handler never has to re-derive it from the controller's current state.
+  let currentArt = { url: '', artist: '', album: '', albumInfo: null };
 
   // ── Controller → UI ──────────────────────────────────────
 
@@ -61,7 +118,7 @@ export function createTransport(controller) {
     if (!track) {
       npTitle.textContent = 'Nothing playing';
       npSub.textContent = 'Still water';
-      npArt.style.backgroundImage = '';
+      paintArt(null);
       return;
     }
 
@@ -70,12 +127,50 @@ export function createTransport(controller) {
       joinMeta(track.artist, track.album) ||
       (track.source === 'youtube' ? 'YouTube' : 'Local file');
 
+    paintArt(track);
+  });
+
+  /** Paint the art thumbnail, and remember enough about it to open the dialog. */
+  function paintArt(track) {
     // `videoId` has already been validated against the id pattern, and
     // `artUrl` is built by our own loopback server, so both are safe to
-    // interpolate into a CSS url().
-    const art = track.videoId ? thumbnailFor(track.videoId) : track.artUrl;
-    npArt.style.backgroundImage = art ? `url("${art}")` : '';
+    // interpolate into a CSS url() or an <img src>.
+    const url = (track && (track.videoId ? thumbnailFor(track.videoId) : track.artUrl)) || '';
+    currentArt = {
+      url,
+      artist: track?.artist ?? '',
+      album: track?.album ?? '',
+      albumInfo: track?.albumInfo ?? null,
+    };
+
+    npArt.style.backgroundImage = url ? `url("${url}")` : '';
+    npArt.disabled = !url;
+  }
+
+  function setArtMaximized(on) {
+    artDialog.classList.toggle('art-viewer--maximized', on);
+    artMaximizeBtn.setAttribute('aria-pressed', String(on));
+    artMaximizeBtn.title = on ? 'Restore' : 'Maximize';
+  }
+
+  npArt.addEventListener('click', () => {
+    if (!currentArt.url) return;
+    artDialogImage.src = currentArt.url;
+    renderCaption(artDialogCaption, currentArt);
+    setArtMaximized(false);
+    artDialog.showModal();
+    // `showModal()` focuses the first focusable control (the close button)
+    // by default; the dialog itself (`tabindex="-1"` in the markup) is a
+    // less distracting place to land the ring, still inside the focus trap.
+    artDialog.focus();
   });
+
+  artMaximizeBtn.addEventListener('click', () => {
+    setArtMaximized(!artDialog.classList.contains('art-viewer--maximized'));
+  });
+
+  $('btn-art-close').addEventListener('click', () => artDialog.close());
+  closeOnBackdropClick(artDialog);
 
   controller.on('volume', ({ volume, muted }) => {
     vol.value = String(Math.round(volume * 100));

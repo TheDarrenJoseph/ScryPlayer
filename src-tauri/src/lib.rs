@@ -1,4 +1,4 @@
-mod album_art_cache;
+mod album_info_cache;
 mod cdda;
 #[cfg(target_os = "linux")]
 mod cdda_linux;
@@ -19,6 +19,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use cdda::DriveInfo;
 use media::{DirListing, Track};
+use musicbrainz::AlbumInfo;
 use server::MediaServer;
 
 /// The set of files the frontend is allowed to read.
@@ -278,44 +279,91 @@ fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<cddb::CdMetadata>
     meta
 }
 
-fn album_art_cache_path(app: &AppHandle) -> Option<PathBuf> {
-    app.path().app_cache_dir().ok().map(|d| d.join("album_art_cache.json"))
+fn album_info_cache_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("album_info_cache.json"))
 }
 
 fn album_art_dir(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_cache_dir().ok().map(|d| d.join("album_art"))
 }
 
-/// Front cover art for a disc's album, from MusicBrainz and the Cover Art
-/// Archive — by the artist/album text GnuDB already resolved, since neither
-/// service can be asked by this app's CDDB checksum (see `musicbrainz`).
-/// Reads through `album_art_cache` first, same reasoning as `lookup_cd_metadata`.
+/// A disc's album info — cover art plus, when MusicBrainz's disc-ID lookup
+/// finds an exact match for the TOC, its country/date and MusicBrainz links
+/// (see `musicbrainz` for why that match matters). `artist`/`album` are the
+/// GnuDB-resolved text, used only as a cover-art fallback when the disc
+/// isn't in MusicBrainz's disc-ID database at all. Reads through
+/// `album_info_cache` first, same reasoning as `lookup_cd_metadata`.
 #[tauri::command]
-fn lookup_album_art(app: AppHandle, drive: String, artist: String, album: String) -> Option<String> {
+fn lookup_album_info(app: AppHandle, drive: String, artist: String, album: String) -> Option<AlbumInfo> {
     let toc = cdda::read_toc(&drive).ok()?;
     let id = cddb::discid(&toc);
-    let cache_path = album_art_cache_path(&app);
+    let cache_key = format!("{id:08x}");
+    let cache_path = album_info_cache_path(&app);
 
     if let Some(path) = &cache_path {
-        if let Some(cached) = album_art_cache::get(path, id) {
-            if let Some(art) = &cached {
+        if let Some(cached) = album_info_cache::get(path, &cache_key) {
+            if let Some(art) = cached.as_ref().and_then(|info| info.art.as_deref()) {
                 app.state::<Arc<MediaScope>>().allow_file(Path::new(art));
             }
             return cached;
         }
     }
 
-    let art = album_art_dir(&app).and_then(|dir| musicbrainz::fetch_cover_art(&artist, &album, &dir, id));
+    let info = album_art_dir(&app)
+        .and_then(|dir| musicbrainz::fetch_album_info(&toc, &artist, &album, &dir, id));
     if let Some(path) = &cache_path {
-        album_art_cache::put(path, id, art.as_deref());
+        album_info_cache::put(path, &cache_key, info.as_ref());
     }
-    if let Some(art) = &art {
+    if let Some(art) = info.as_ref().and_then(|info| info.art.as_deref()) {
         app.state::<Arc<MediaScope>>().allow_file(Path::new(art));
     }
-    art
+    info
 }
 
-/// Forget every cached GnuDB lookup and cached cover art, so the next scan
+/// Album info for a local track's own album — an exact match when the file
+/// carries its own embedded MusicBrainz Release ID tag (common from
+/// Picard-tagged rips), the same trust model as the CD disc-ID path: only an
+/// exact ID match ever populates country/date/ASIN/the release link. Without
+/// one, `artist`/`album` (the file's own tags) are used only as a cover-art
+/// fallback. Reads through `album_info_cache` first, same as `lookup_album_info`.
+#[tauri::command]
+fn lookup_local_album_info(
+    app: AppHandle,
+    release_id: Option<String>,
+    artist: String,
+    album: String,
+) -> Option<AlbumInfo> {
+    if release_id.is_none() && (artist.trim().is_empty() || album.trim().is_empty()) {
+        return None; // nothing to key a cache entry on, or to search by
+    }
+
+    let cache_key = release_id
+        .clone()
+        .unwrap_or_else(|| format!("{}|{}", artist.trim().to_lowercase(), album.trim().to_lowercase()));
+    let cache_path = album_info_cache_path(&app);
+
+    if let Some(path) = &cache_path {
+        if let Some(cached) = album_info_cache::get(path, &cache_key) {
+            if let Some(art) = cached.as_ref().and_then(|info| info.art.as_deref()) {
+                app.state::<Arc<MediaScope>>().allow_file(Path::new(art));
+            }
+            return cached;
+        }
+    }
+
+    let info = album_art_dir(&app).and_then(|dir| {
+        musicbrainz::fetch_local_album_info(release_id.as_deref(), &artist, &album, &dir, &cache_key)
+    });
+    if let Some(path) = &cache_path {
+        album_info_cache::put(path, &cache_key, info.as_ref());
+    }
+    if let Some(art) = info.as_ref().and_then(|info| info.art.as_deref()) {
+        app.state::<Arc<MediaScope>>().allow_file(Path::new(art));
+    }
+    info
+}
+
+/// Forget every cached GnuDB lookup and cached album info, so the next scan
 /// of each disc asks again — for when a cached entry turns out wrong, or
 /// just to reclaim the (small) disk space.
 #[tauri::command]
@@ -323,8 +371,8 @@ fn clear_cddb_cache(app: AppHandle) {
     if let Some(path) = cddb_cache_path(&app) {
         cddb_cache::clear(&path);
     }
-    if let (Some(cache_path), Some(dir)) = (album_art_cache_path(&app), album_art_dir(&app)) {
-        album_art_cache::clear(&cache_path, &dir);
+    if let (Some(cache_path), Some(dir)) = (album_info_cache_path(&app), album_art_dir(&app)) {
+        album_info_cache::clear(&cache_path, &dir);
     }
 }
 
@@ -376,6 +424,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .manage(scope)
         .manage(media_server)
         .invoke_handler(tauri::generate_handler![
@@ -391,7 +440,8 @@ pub fn run() {
             scan_cd,
             cd_track_url,
             lookup_cd_metadata,
-            lookup_album_art,
+            lookup_album_info,
+            lookup_local_album_info,
             clear_cddb_cache,
             pick_folder,
             pick_files

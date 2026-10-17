@@ -9,7 +9,7 @@ let createTransport;
 /** The transport markup from index.html, stripped of its inline SVG. */
 const MARKUP = `
   <div class="np">
-    <div class="np__art" id="np-art"></div>
+    <button class="np__art" id="np-art" type="button" disabled></button>
     <div class="np__title" id="np-title">Nothing playing</div>
     <div class="np__sub" id="np-sub">Still water</div>
   </div>
@@ -23,10 +23,30 @@ const MARKUP = `
   <span id="time-dur">0:00</span>
   <button id="btn-mute" title="Mute" aria-pressed="false"></button>
   <input id="vol" type="range" min="0" max="100" value="80" step="1" />
+  <dialog id="art-dialog" tabindex="-1">
+    <button id="btn-art-maximize" aria-pressed="false"></button>
+    <button id="btn-art-close"></button>
+    <img id="art-dialog-image" alt="Cover art" />
+    <p id="art-dialog-caption"></p>
+  </dialog>
 `;
 
+/**
+ * A stand-in for the Tauri bridge `transport.js` needs for `openExternal`.
+ * `tauri.js` reads `window.__TAURI__` at import time and throws without it,
+ * so this has to be installed before `transport.js` is imported.
+ */
+const bridge = {
+  calls: [],
+  invoke(command, args) {
+    bridge.calls.push({ command, args });
+    return Promise.resolve();
+  },
+};
+
 before(async () => {
-  installDom(MARKUP);
+  const { window } = installDom(MARKUP);
+  window.__TAURI__ = { core: { invoke: bridge.invoke } };
   ({ createTransport } = await import('../src/ui/transport.js'));
 });
 
@@ -74,8 +94,11 @@ let controller;
 const $ = (id) => document.getElementById(id);
 
 beforeEach(() => {
-  document.body.innerHTML = MARKUP;
+  // Not a bare innerHTML reset: the `<dialog>` needs `installDom`'s shim
+  // re-applied to the fresh nodes, or `showModal`/`close` are no-ops.
+  installDom(MARKUP);
   controller = new FakeController();
+  bridge.calls = [];
 });
 
 describe('createTransport', () => {
@@ -114,6 +137,7 @@ describe('createTransport', () => {
     it('carries no artwork for a local file with no folder cover', () => {
       controller.emit('track', { track: { title: 'x', source: 'local' } });
       assert.equal($('np-art').style.backgroundImage, '');
+      assert.equal($('np-art').disabled, true, 'nothing to open without art');
     });
 
     it('shows the folder cover for a local file once resolved', () => {
@@ -125,6 +149,7 @@ describe('createTransport', () => {
         },
       });
       assert.match($('np-art').style.backgroundImage, /127\.0\.0\.1:1234\/art/);
+      assert.equal($('np-art').disabled, false);
     });
 
     it('settles back to nothing when the queue empties', () => {
@@ -134,6 +159,7 @@ describe('createTransport', () => {
       assert.equal($('np-title').textContent, 'Nothing playing');
       assert.equal($('np-sub').textContent, 'Still water');
       assert.equal($('np-art').style.backgroundImage, '', 'the old artwork goes too');
+      assert.equal($('np-art').disabled, true);
     });
 
     it('renders a scripted title as text', () => {
@@ -142,6 +168,225 @@ describe('createTransport', () => {
 
       assert.equal($('np-title').textContent, nasty);
       assert.equal($('np-title').querySelector('img'), null);
+    });
+  });
+
+  describe('the art dialog', () => {
+    beforeEach(() => createTransport(controller));
+
+    it('opens with the art and an album/artist caption when clicked', () => {
+      controller.emit('track', {
+        track: { title: 'x', artist: 'Massive Attack', album: 'Mezzanine', artUrl: 'http://x/art.jpg' },
+      });
+
+      click($('np-art'));
+
+      assert.equal($('art-dialog').open, true);
+      assert.equal($('art-dialog-image').src, 'http://x/art.jpg');
+      assert.equal($('art-dialog-caption').textContent, 'Mezzanine · Massive Attack');
+    });
+
+    it('focuses the dialog itself, not the close button, when opened', () => {
+      controller.emit('track', { track: { title: 'x', artUrl: 'http://x/art.jpg' } });
+
+      click($('np-art'));
+
+      assert.equal(document.activeElement, $('art-dialog'));
+    });
+
+    it('adds country, date and track count from album info', () => {
+      controller.emit('track', {
+        track: {
+          title: 'x',
+          artist: 'Foals',
+          album: 'Total Life Forever',
+          artUrl: 'http://x/art.jpg',
+          albumInfo: {
+            country: 'GB',
+            date: '2010-05-10',
+            trackCount: 11,
+            releaseUrl: null,
+            tocUrl: null,
+          },
+        },
+      });
+
+      click($('np-art'));
+
+      assert.equal(
+        $('art-dialog-caption').textContent,
+        'Total Life Forever · Foals · GB · 2010-05-10 · 11 tracks',
+      );
+    });
+
+    it('appends MusicBrainz/TOC/Release links when the disc has an exact match', () => {
+      controller.emit('track', {
+        track: {
+          title: 'x',
+          artist: 'Foals',
+          album: 'Total Life Forever',
+          artUrl: 'http://x/art.jpg',
+          albumInfo: {
+            country: 'GB',
+            date: '2010-05-10',
+            trackCount: 11,
+            releaseUrl: 'https://musicbrainz.org/release/507b4cda-bebd-468e-a1fc-f8873f162f67',
+            tocUrl: 'https://musicbrainz.org/cdtoc/F5gDrr2p.IMUvUxfNSc884xb.pc-',
+          },
+        },
+      });
+
+      click($('np-art'));
+
+      const caption = $('art-dialog-caption');
+      assert.match(caption.textContent, /\(MusicBrainz: TOC · Release\)$/);
+
+      // "MusicBrainz" only names where the links lead — it is not itself one.
+      const links = Object.fromEntries([...caption.querySelectorAll('a')].map((a) => [a.textContent, a.href]));
+      assert.equal(links.MusicBrainz, undefined);
+      assert.equal(links.TOC, 'https://musicbrainz.org/cdtoc/F5gDrr2p.IMUvUxfNSc884xb.pc-');
+      assert.equal(links.Release, 'https://musicbrainz.org/release/507b4cda-bebd-468e-a1fc-f8873f162f67');
+    });
+
+    it('adds the ASIN to the facts line when present', () => {
+      controller.emit('track', {
+        track: {
+          title: 'x',
+          artist: 'Foals',
+          album: 'Total Life Forever',
+          artUrl: 'http://x/art.jpg',
+          albumInfo: {
+            country: 'GB',
+            date: '2010-05-10',
+            trackCount: 11,
+            asin: 'B003D7F33Q',
+            releaseUrl: null,
+            tocUrl: null,
+          },
+        },
+      });
+
+      click($('np-art'));
+
+      assert.equal(
+        $('art-dialog-caption').textContent,
+        'Total Life Forever · Foals · GB · 2010-05-10 · 11 tracks · ASIN B003D7F33Q',
+      );
+    });
+
+    it('opens a caption link in the default browser instead of navigating', () => {
+      controller.emit('track', {
+        track: {
+          title: 'x',
+          artist: 'Foals',
+          album: 'Total Life Forever',
+          artUrl: 'http://x/art.jpg',
+          albumInfo: {
+            country: 'GB',
+            date: '2010-05-10',
+            trackCount: 11,
+            releaseUrl: 'https://musicbrainz.org/release/507b4cda-bebd-468e-a1fc-f8873f162f67',
+            tocUrl: null,
+          },
+        },
+      });
+      click($('np-art'));
+
+      const releaseLink = [...$('art-dialog-caption').querySelectorAll('a')].find((a) => a.textContent === 'Release');
+      // Not the shared `click()` helper: it dispatches a non-cancelable event,
+      // and `preventDefault()` on a non-cancelable one is a silent no-op — jsdom
+      // would then try to actually navigate, which it does not implement.
+      releaseLink.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+      assert.deepEqual(bridge.calls, [
+        {
+          command: 'plugin:shell|open',
+          args: { path: 'https://musicbrainz.org/release/507b4cda-bebd-468e-a1fc-f8873f162f67' },
+        },
+      ]);
+    });
+
+    it('omits the MusicBrainz line entirely when there are no links', () => {
+      controller.emit('track', {
+        track: {
+          title: 'x',
+          artist: 'Foals',
+          album: 'Total Life Forever',
+          artUrl: 'http://x/art.jpg',
+          albumInfo: { country: 'GB', date: '2010-05-10', trackCount: 11, releaseUrl: null, tocUrl: null },
+        },
+      });
+
+      click($('np-art'));
+
+      assert.equal($('art-dialog-caption').querySelector('a'), null);
+      assert.ok(!$('art-dialog-caption').textContent.includes('MusicBrainz'));
+    });
+
+    it('shows the YouTube thumbnail when there is no local art', () => {
+      controller.emit('track', { track: { title: 'x', videoId: 'dQw4w9WgXcQ' } });
+
+      click($('np-art'));
+
+      assert.match($('art-dialog-image').src, /i\.ytimg\.com\/vi\/dQw4w9WgXcQ/);
+    });
+
+    it('does nothing when there is no art to show', () => {
+      controller.emit('track', { track: { title: 'x' } });
+
+      click($('np-art'));
+
+      assert.equal($('art-dialog').open, false);
+    });
+
+    it('closes from the close button', () => {
+      controller.emit('track', { track: { title: 'x', artUrl: 'http://x/art.jpg' } });
+      click($('np-art'));
+
+      click($('btn-art-close'));
+
+      assert.equal($('art-dialog').open, false);
+    });
+
+    it('closes on a click outside the panel', () => {
+      controller.emit('track', { track: { title: 'x', artUrl: 'http://x/art.jpg' } });
+      click($('np-art'));
+
+      // jsdom reports a zero-size box, so any non-zero point is outside it.
+      $('art-dialog').dispatchEvent(
+        new window.MouseEvent('click', { clientX: 9999, clientY: 9999, bubbles: true }),
+      );
+
+      assert.equal($('art-dialog').open, false);
+    });
+
+    describe('maximizing', () => {
+      beforeEach(() => {
+        controller.emit('track', { track: { title: 'x', artUrl: 'http://x/art.jpg' } });
+        click($('np-art'));
+      });
+
+      it('toggles the maximized class and aria-pressed on click', () => {
+        click($('btn-art-maximize'));
+
+        assert.equal($('art-dialog').classList.contains('art-viewer--maximized'), true);
+        assert.equal($('btn-art-maximize').getAttribute('aria-pressed'), 'true');
+
+        click($('btn-art-maximize'));
+
+        assert.equal($('art-dialog').classList.contains('art-viewer--maximized'), false);
+        assert.equal($('btn-art-maximize').getAttribute('aria-pressed'), 'false');
+      });
+
+      it('resets to not maximized the next time the dialog opens', () => {
+        click($('btn-art-maximize'));
+        assert.equal($('art-dialog').classList.contains('art-viewer--maximized'), true);
+
+        click($('btn-art-close'));
+        click($('np-art'));
+
+        assert.equal($('art-dialog').classList.contains('art-viewer--maximized'), false);
+      });
     });
   });
 

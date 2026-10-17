@@ -759,6 +759,15 @@ svg {
   overflow: hidden;
   background-size: cover;
   background-position: center;
+  transition: filter var(--fast) var(--ease);
+}
+
+.np__art:not(:disabled):hover {
+  filter: brightness(1.15);
+}
+
+.np__art:disabled {
+  cursor: default;
 }
 
 .np__art::after {
@@ -1163,6 +1172,63 @@ svg {
 .btn--danger:hover {
   color: var(--danger);
   border-color: rgba(217, 138, 138, 0.4);
+}
+
+.art-viewer {
+  width: min(360px, calc(100vw - 32px));
+  padding: 8px 20px 20px;
+  border: 1px solid var(--pane-line);
+  border-radius: var(--r-lg);
+  background: var(--pane-bg-solid);
+  color: var(--moon-soft);
+  box-shadow: var(--shadow-pane);
+  transition: width var(--fast) var(--ease);
+}
+
+.art-viewer:focus-visible {
+  outline: none;
+}
+
+.art-viewer--maximized {
+  width: min(90vw, 90vh);
+}
+
+.art-viewer::backdrop {
+  background: rgba(2, 4, 9, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.art-viewer__head {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.art-viewer__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  border: 1px solid var(--pane-line);
+  background: radial-gradient(circle at 32% 26%, rgba(143, 182, 232, 0.32), rgba(7, 11, 20, 0.9) 70%);
+  object-fit: cover;
+}
+
+.art-viewer__caption {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--moon-faint);
+}
+
+.art-viewer__caption a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.art-viewer__caption a:hover {
+  text-decoration: underline;
 }
 
 /* A checkbox wearing a switch. Still a checkbox to the keyboard and to

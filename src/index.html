@@ -173,7 +173,14 @@
       <!-- ───────────── Shared transport ───────────── -->
       <footer class="transport">
         <div class="np">
-          <div class="np__art" id="np-art" aria-hidden="true"></div>
+          <button
+            class="np__art"
+            id="np-art"
+            type="button"
+            title="View cover art"
+            aria-label="View cover art"
+            disabled
+          ></button>
           <div class="np__meta">
             <div class="np__title" id="np-title">Nothing playing</div>
             <div class="np__sub" id="np-sub">Still water</div>
@@ -317,19 +324,63 @@
           </div>
           <input class="switch" type="checkbox" id="set-album-art-lookup" />
         </li>
+
+        <li class="setting">
+          <div class="setting__text">
+            <label class="setting__name" for="set-local-album-info-lookup">
+              Look up album info for local files
+            </label>
+            <p class="setting__hint">
+              Fetches release info and, when a folder has no <code>cover.jpg</code> of
+              its own, cover art from MusicBrainz and the Cover Art Archive for local
+              files — an exact match when a file carries its own MusicBrainz tag, or
+              its artist/album tags as a cover-art-only fallback otherwise. Found info
+              is cached on disk, so it's only fetched once per album.
+            </p>
+          </div>
+          <input class="switch" type="checkbox" id="set-local-album-info-lookup" />
+        </li>
       </ul>
 
       <div class="settings__foot">
         <p class="settings__note" id="settings-note" role="status" aria-live="polite"></p>
         <div class="settings__actions">
           <button class="btn btn--ghost btn--sm" type="button" id="btn-clear-cddb-cache">
-            Clear cached CD info and art
+            Clear cached album info
           </button>
           <button class="btn btn--ghost btn--sm btn--danger" type="button" id="btn-forget">
             Forget saved session
           </button>
         </div>
       </div>
+    </dialog>
+
+    <!-- A native dialog for viewing the current track's cover art at full size.
+         `tabindex="-1"` lets focus land on the dialog itself rather than
+         wherever `showModal()` would otherwise put it (the first focusable
+         control — the close button). -->
+    <dialog class="art-viewer" id="art-dialog" aria-labelledby="art-dialog-caption" tabindex="-1">
+      <div class="art-viewer__head">
+        <button
+          class="iconbtn art-viewer__maximize"
+          id="btn-art-maximize"
+          type="button"
+          title="Maximize"
+          aria-label="Maximize cover art"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6" />
+          </svg>
+        </button>
+        <button class="iconbtn art-viewer__close" id="btn-art-close" title="Close" aria-label="Close cover art">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+      <img class="art-viewer__image" id="art-dialog-image" alt="Cover art" />
+      <p class="art-viewer__caption" id="art-dialog-caption"></p>
     </dialog>
 
     <script type="module" src="./main.js"></script>

@@ -61,7 +61,7 @@ let run = 0;
  * `main.js` runs its work on import, so each scenario needs its own module
  * instance — hence the query string, which makes the specifier unique.
  */
-async function boot({ session = SAVED, settings, styles = false } = {}) {
+async function boot({ session = SAVED, settings, styles = false, handlers = {} } = {}) {
   const { window } = installAppDom({ styles });
   window.__TAURI__ = { core: { invoke: bridge.invoke } };
 
@@ -70,6 +70,7 @@ async function boot({ session = SAVED, settings, styles = false } = {}) {
     shortcuts: () => [{ label: 'Music', path: '/music' }],
     list_dir: ({ path }) => ({ path: path ?? '/music', parent: '/', entries: [] }),
     grant_paths: () => undefined,
+    ...handlers,
   };
 
   if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -111,6 +112,23 @@ describe('main', () => {
       assert.deepEqual(grant.args.paths, ['/music/a.mp3', '/music/b.mp3']);
     });
 
+    it("re-grants a restored track's own folder cover too, not just the audio file", async () => {
+      await boot({
+        session: {
+          ...SAVED,
+          localQueue: {
+            items: [track({ art: '/music/cover.jpg' })],
+            index: 0,
+            repeat: 'off',
+            shuffle: false,
+          },
+        },
+      });
+
+      const grant = bridge.calls.find((c) => c.command === 'grant_paths');
+      assert.deepEqual(grant.args.paths, ['/music/a.mp3', '/music/cover.jpg']);
+    });
+
     it('leaves the queues empty when the setting is off', async () => {
       await boot({ settings: { restoreSession: false, water: true } });
 
@@ -143,6 +161,31 @@ describe('main', () => {
       assert.equal($('count-local').textContent, '0');
       assert.equal($('tab-local').getAttribute('aria-selected'), 'true');
       assert.equal($('vol').value, '80', 'the default level');
+    });
+
+    it('re-runs CD enrichment for a restored disc, since a scan never happened to trigger it', async () => {
+      await boot({
+        session: {
+          ...SAVED,
+          cdQueue: {
+            items: [{ drive: '/dev/sr0', trackNo: 1, startLba: 0, endLba: 21_000, title: 'Track 1', source: 'cd' }],
+            index: -1,
+            repeat: 'off',
+            shuffle: false,
+          },
+        },
+        handlers: {
+          lookup_cd_metadata: () => ({
+            artist: 'Fleetwood Mac',
+            album: 'Rumours',
+            trackTitles: ['Second Hand News'],
+          }),
+        },
+      });
+
+      const call = bridge.calls.find((c) => c.command === 'lookup_cd_metadata');
+      assert.deepEqual(call.args, { drive: '/dev/sr0' });
+      assert.equal(document.querySelector('#queue-cd .row__name')?.textContent, 'Second Hand News');
     });
   });
 

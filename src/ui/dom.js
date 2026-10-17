@@ -50,3 +50,20 @@ export function emptyState(...lines) {
   });
   return box;
 }
+
+/**
+ * Close a native `<dialog>` when its backdrop is clicked.
+ *
+ * The backdrop has no element of its own — a click there still lands on the
+ * dialog — so a click only counts as "outside" when it falls outside the
+ * dialog's own box.
+ */
+export function closeOnBackdropClick(dialog) {
+  dialog.addEventListener('click', (e) => {
+    if (e.target !== dialog) return;
+    const box = dialog.getBoundingClientRect();
+    const outside =
+      e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom;
+    if (outside) dialog.close();
+  });
+}

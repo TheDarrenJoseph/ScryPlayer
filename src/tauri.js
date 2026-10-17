@@ -84,15 +84,41 @@ export const cdTrackUrl = (drive, startLba, endLba) =>
 export const lookupCdMetadata = (drive) => invoke('lookup_cd_metadata', { drive });
 
 /**
- * A cached-on-disk cover image path for a disc's album, from MusicBrainz and
- * the Cover Art Archive, resolved by the artist/album text `lookupCdMetadata`
- * already found. `null` when no match or no cover art exists for it.
+ * A disc's album info from MusicBrainz and the Cover Art Archive: a
+ * cached-on-disk cover image path, plus — only when MusicBrainz's disc-ID
+ * lookup found an exact match for the disc's own TOC — its release country,
+ * date, and MusicBrainz links. `artist`/`album` (the text `lookupCdMetadata`
+ * already found) are used only as a cover-art fallback when the disc isn't
+ * in MusicBrainz's disc-ID database at all, so `country`/`date`/the links
+ * are never a guess. `null` when nothing at all was found.
  *
- * @returns {Promise<string | null>}
+ * @returns {Promise<{ art: string|null, country: string|null, date: string|null, asin: string|null, releaseUrl: string|null, tocUrl: string|null } | null>}
  */
-export const lookupAlbumArt = (drive, artist, album) =>
-  invoke('lookup_album_art', { drive, artist, album });
+export const lookupAlbumInfo = (drive, artist, album) =>
+  invoke('lookup_album_info', { drive, artist, album });
 
-/** Forget every cached GnuDB lookup and cached cover art, so the next scan
- * of each disc asks again. */
+/**
+ * A local track's own album info, the same shape as `lookupAlbumInfo` and
+ * the same trust rule: `country`/`date`/`asin`/`releaseUrl` only ever come
+ * from an exact match — here, the file's own embedded MusicBrainz Release Id
+ * tag (`releaseId`, as read by the backend; `null` when the file has none).
+ * Without one, `artist`/`album` (the file's own tags) are used only as a
+ * cover-art fallback, same as GnuDB's text does for a CD with no disc-ID
+ * match. `tocUrl` has no local-file equivalent, so it is always `null`.
+ *
+ * @returns {Promise<{ art: string|null, country: string|null, date: string|null, asin: string|null, releaseUrl: string|null, tocUrl: null } | null>}
+ */
+export const lookupLocalAlbumInfo = (releaseId, artist, album) =>
+  invoke('lookup_local_album_info', { releaseId, artist, album });
+
+/** Forget every cached GnuDB lookup and cached album info (CD and local
+ * alike), so the next scan or play asks again. */
 export const clearCddbCache = () => invoke('clear_cddb_cache');
+
+/**
+ * Open a URL in the user's default browser rather than inside the app's own
+ * webview — for the MusicBrainz/TOC links in the album info dialog.
+ *
+ * @returns {Promise<void>}
+ */
+export const openExternal = (url) => invoke('plugin:shell|open', { path: url });
