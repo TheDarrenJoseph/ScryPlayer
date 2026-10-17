@@ -17,6 +17,10 @@ export const DEFAULTS = {
   // On by default: scanning a disc is already an explicit action, and all
   // that leaves this machine is a checksum of the disc's track layout.
   cddbLookup: true,
+  // Depends on `cddbLookup` resolving an artist/album to search by — on by
+  // default for the same reason, but it sends real text rather than a
+  // checksum, to a second service.
+  albumArtLookup: true,
 };
 
 /** Read the saved settings, falling back per-field so a partial save is fine. */
@@ -34,6 +38,7 @@ export function loadSettings() {
     restoreSession: pick('restoreSession'),
     water: pick('water'),
     cddbLookup: pick('cddbLookup'),
+    albumArtLookup: pick('albumArtLookup'),
   };
 }
 
@@ -54,7 +59,7 @@ function save(values) {
  * @param {(values: object) => void} handlers.onChange after any setting changes
  * @param {() => void} handlers.onForget the saved session should be discarded
  * @param {() => Promise<void>} handlers.onClearCddbCache the cached GnuDB
- *   lookups should be discarded
+ *   lookups and cached cover art should be discarded
  */
 export function createSettings(values, { onChange, onForget, onClearCddbCache }) {
   const dialog = $('settings-dialog');
@@ -62,10 +67,12 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
   const restore = $('set-restore');
   const water = $('set-water');
   const cddbLookup = $('set-cddb-lookup');
+  const albumArtLookup = $('set-album-art-lookup');
 
   restore.checked = values.restoreSession;
   water.checked = values.water;
   cddbLookup.checked = values.cddbLookup;
+  albumArtLookup.checked = values.albumArtLookup;
 
   function update(key, on) {
     values[key] = on;
@@ -76,6 +83,9 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
   restore.addEventListener('change', () => update('restoreSession', restore.checked));
   water.addEventListener('change', () => update('water', water.checked));
   cddbLookup.addEventListener('change', () => update('cddbLookup', cddbLookup.checked));
+  albumArtLookup.addEventListener('change', () =>
+    update('albumArtLookup', albumArtLookup.checked),
+  );
 
   $('btn-forget').addEventListener('click', () => {
     onForget();
@@ -86,9 +96,9 @@ export function createSettings(values, { onChange, onForget, onClearCddbCache })
   $('btn-clear-cddb-cache').addEventListener('click', async () => {
     try {
       await onClearCddbCache();
-      note.textContent = 'Cleared cached CD info.';
+      note.textContent = 'Cleared cached CD info and art.';
     } catch {
-      note.textContent = 'Could not clear the cached CD info.';
+      note.textContent = 'Could not clear the cached CD info and art.';
     }
   });
 

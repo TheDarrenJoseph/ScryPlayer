@@ -26,6 +26,9 @@ tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 percent-encoding = "2"
 
+# Simple HTTP client for external API calls.
+ureq = { version = "2", features = ["tls"] }
+
 # Audio CD sector/TOC reading goes through the OS's raw SCSI passthrough,
 # which neither `tauri` nor any other existing dependency exposes.
 [target.'cfg(unix)'.dependencies]

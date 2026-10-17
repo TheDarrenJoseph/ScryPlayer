@@ -83,5 +83,16 @@ export const cdTrackUrl = (drive, startLba, endLba) =>
  */
 export const lookupCdMetadata = (drive) => invoke('lookup_cd_metadata', { drive });
 
-/** Forget every cached GnuDB lookup, so the next scan of each disc asks again. */
+/**
+ * A cached-on-disk cover image path for a disc's album, from MusicBrainz and
+ * the Cover Art Archive, resolved by the artist/album text `lookupCdMetadata`
+ * already found. `null` when no match or no cover art exists for it.
+ *
+ * @returns {Promise<string | null>}
+ */
+export const lookupAlbumArt = (drive, artist, album) =>
+  invoke('lookup_album_art', { drive, artist, album });
+
+/** Forget every cached GnuDB lookup and cached cover art, so the next scan
+ * of each disc asks again. */
 export const clearCddbCache = () => invoke('clear_cddb_cache');

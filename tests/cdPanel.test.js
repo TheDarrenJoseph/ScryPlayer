@@ -65,13 +65,15 @@ beforeEach(() => {
     list_cd_drives: () => [DRIVE],
     scan_cd: () => [cdTrack(), cdTrack({ trackNo: 2, title: 'Track 2', startLba: 21_000, endLba: 45_000 })],
     lookup_cd_metadata: () => null,
+    lookup_album_art: () => null,
+    art_url: (args) => `http://127.0.0.1:1234/art?token=abc&path=${encodeURIComponent(args.path)}`,
   };
 
   controller = new Controller();
   adapter = new FakeAdapter();
   queue = new Queue('cd');
   status = [];
-  settings = { cddbLookup: true };
+  settings = { cddbLookup: true, albumArtLookup: true };
 
   controller.register('cd', adapter, queue);
   createCdPanel(controller, queue, {
@@ -212,6 +214,70 @@ describe('createCdPanel', () => {
 
       assert.equal(queue.length, 1, 'the second scan replaced the queue');
       assert.equal(queue.items[0].title, 'Other disc track', 'the stale lookup did not overwrite it');
+    });
+  });
+
+  describe('cover art enrichment', () => {
+    beforeEach(() => {
+      bridge.handlers.lookup_cd_metadata = () => ({
+        artist: 'Fleetwood Mac',
+        album: 'Rumours',
+        trackTitles: ['Second Hand News', 'Dreams'],
+      });
+    });
+
+    it('resolves a shared artUrl onto every track from the disc', async () => {
+      bridge.handlers.lookup_album_art = () => '/cache/album_art/abc123.jpg';
+
+      await scan();
+
+      const call = bridge.calls.find((c) => c.command === 'lookup_album_art');
+      assert.deepEqual(call.args, { drive: '/dev/sr0', artist: 'Fleetwood Mac', album: 'Rumours' });
+
+      assert.match(queue.items[0].artUrl, /abc123\.jpg/);
+      assert.equal(queue.items[0].artUrl, queue.items[1].artUrl, 'one cover for the whole album');
+    });
+
+    it('leaves artUrl unset when no cover art is found', async () => {
+      bridge.handlers.lookup_album_art = () => null;
+
+      await scan();
+
+      assert.equal(queue.items[0].artUrl, undefined);
+    });
+
+    it('never asks for art when the setting is off', async () => {
+      settings.albumArtLookup = false;
+      bridge.handlers.lookup_album_art = () => '/cache/album_art/abc123.jpg';
+
+      await scan();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_album_art'));
+    });
+
+    it('never asks for art when GnuDB has no match to search by', async () => {
+      bridge.handlers.lookup_cd_metadata = () => null;
+      bridge.handlers.lookup_album_art = () => '/cache/album_art/abc123.jpg';
+
+      await scan();
+
+      assert.ok(!bridge.calls.some((c) => c.command === 'lookup_album_art'));
+    });
+
+    it('ignores a late answer after the disc was rescanned', async () => {
+      let resolveArt;
+      bridge.handlers.lookup_album_art = () => new Promise((r) => (resolveArt = r));
+
+      await scan();
+
+      bridge.handlers.scan_cd = () => [cdTrack({ title: 'Other disc track' })];
+      bridge.handlers.lookup_cd_metadata = () => null;
+      await scan();
+
+      resolveArt('/cache/album_art/stale.jpg');
+      await settle();
+
+      assert.equal(queue.items[0].artUrl, undefined, 'the stale lookup did not land on the new disc');
     });
   });
 

@@ -1,9 +1,11 @@
+mod album_art_cache;
 mod cdda;
 #[cfg(target_os = "linux")]
 mod cdda_linux;
 mod cddb;
 mod cddb_cache;
 mod media;
+mod musicbrainz;
 mod server;
 
 use std::collections::HashSet;
@@ -276,13 +278,53 @@ fn lookup_cd_metadata(app: AppHandle, drive: String) -> Option<cddb::CdMetadata>
     meta
 }
 
-/// Forget every cached GnuDB lookup, so the next scan of each disc asks
-/// again — for when a cached entry turns out wrong, or just to reclaim the
-/// (small) disk space.
+fn album_art_cache_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("album_art_cache.json"))
+}
+
+fn album_art_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("album_art"))
+}
+
+/// Front cover art for a disc's album, from MusicBrainz and the Cover Art
+/// Archive — by the artist/album text GnuDB already resolved, since neither
+/// service can be asked by this app's CDDB checksum (see `musicbrainz`).
+/// Reads through `album_art_cache` first, same reasoning as `lookup_cd_metadata`.
+#[tauri::command]
+fn lookup_album_art(app: AppHandle, drive: String, artist: String, album: String) -> Option<String> {
+    let toc = cdda::read_toc(&drive).ok()?;
+    let id = cddb::discid(&toc);
+    let cache_path = album_art_cache_path(&app);
+
+    if let Some(path) = &cache_path {
+        if let Some(cached) = album_art_cache::get(path, id) {
+            if let Some(art) = &cached {
+                app.state::<Arc<MediaScope>>().allow_file(Path::new(art));
+            }
+            return cached;
+        }
+    }
+
+    let art = album_art_dir(&app).and_then(|dir| musicbrainz::fetch_cover_art(&artist, &album, &dir, id));
+    if let Some(path) = &cache_path {
+        album_art_cache::put(path, id, art.as_deref());
+    }
+    if let Some(art) = &art {
+        app.state::<Arc<MediaScope>>().allow_file(Path::new(art));
+    }
+    art
+}
+
+/// Forget every cached GnuDB lookup and cached cover art, so the next scan
+/// of each disc asks again — for when a cached entry turns out wrong, or
+/// just to reclaim the (small) disk space.
 #[tauri::command]
 fn clear_cddb_cache(app: AppHandle) {
     if let Some(path) = cddb_cache_path(&app) {
         cddb_cache::clear(&path);
+    }
+    if let (Some(cache_path), Some(dir)) = (album_art_cache_path(&app), album_art_dir(&app)) {
+        album_art_cache::clear(&cache_path, &dir);
     }
 }
 
@@ -349,6 +391,7 @@ pub fn run() {
             scan_cd,
             cd_track_url,
             lookup_cd_metadata,
+            lookup_album_art,
             clear_cddb_cache,
             pick_folder,
             pick_files

@@ -1,4 +1,4 @@
-import { listCdDrives, lookupCdMetadata, scanCd } from '../tauri.js';
+import { artUrl, listCdDrives, lookupAlbumArt, lookupCdMetadata, scanCd } from '../tauri.js';
 import { renderQueue } from './queueList.js';
 
 const $ = (id) => document.getElementById(id);
@@ -15,7 +15,9 @@ const asMessage = (err, fallback) => (typeof err === 'string' ? err : (err?.mess
  *
  * A scan's TOC-only "Track N" titles are enriched in the background from
  * GnuDB, when the setting allows it — the same shape as how YouTube's real
- * title arrives after `youtubePanel.js` queues its placeholder.
+ * title arrives after `youtubePanel.js` queues its placeholder. Cover art
+ * follows the same shape again, chained off whatever artist/album GnuDB
+ * found, when that setting allows it too.
  */
 export function createCdPanel(controller, queue, { setStatus, settings }) {
   const queueEl = $('queue-cd');
@@ -100,7 +102,33 @@ export function createCdPanel(controller, queue, { setStatus, settings }) {
       }
 
       queue.emit('change', queue);
+
+      // Needs an artist and album to search by — GnuDB having nothing for
+      // this disc leaves nothing to look cover art up with either.
+      if (settings.albumArtLookup && info.artist && info.album) {
+        enrichArt(drive, queuedTracks, info.artist, info.album);
+      }
     });
+  }
+
+  /**
+   * Same shape as `enrich`'s metadata patch, for the album's cover: resolve
+   * it once in the background and fan it out to every track from this disc.
+   */
+  function enrichArt(drive, queuedTracks, artist, album) {
+    lookupAlbumArt(drive, artist, album)
+      .then((path) => (path ? artUrl(path) : null))
+      .then((url) => {
+        if (!url) return;
+
+        for (const track of queuedTracks) {
+          if (!queue.items.includes(track)) continue;
+          track.artUrl = url;
+        }
+
+        queue.emit('change', queue);
+      })
+      .catch(() => {}); // A missing cover must not surface as an error.
   }
 
   scanBtn.addEventListener('click', scan);

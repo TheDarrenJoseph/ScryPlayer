@@ -305,13 +305,25 @@
           </div>
           <input class="switch" type="checkbox" id="set-cddb-lookup" />
         </li>
+
+        <li class="setting">
+          <div class="setting__text">
+            <label class="setting__name" for="set-album-art-lookup">Look up CD cover art</label>
+            <p class="setting__hint">
+              Fetches cover art for a scanned disc's album from MusicBrainz and the
+              Cover Art Archive, using the artist and album GnuDB resolved. Found art is
+              cached on disk, so it's only fetched once per disc.
+            </p>
+          </div>
+          <input class="switch" type="checkbox" id="set-album-art-lookup" />
+        </li>
       </ul>
 
       <div class="settings__foot">
         <p class="settings__note" id="settings-note" role="status" aria-live="polite"></p>
         <div class="settings__actions">
           <button class="btn btn--ghost btn--sm" type="button" id="btn-clear-cddb-cache">
-            Clear cached CD info
+            Clear cached CD info and art
           </button>
           <button class="btn btn--ghost btn--sm btn--danger" type="button" id="btn-forget">
             Forget saved session
