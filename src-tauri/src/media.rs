@@ -13,6 +13,9 @@ pub const PLAYABLE_EXTS: &[&str] = &[
 /// Audio we still list, but that the WebView will probably refuse to play.
 const OTHER_AUDIO_EXTS: &[&str] = &["wma", "aiff", "aif", "ape", "wv", "mpc", "alac", "dsf"];
 
+/// Extensions recognised for a folder-level cover image.
+const COVER_EXTS: &[&str] = &["jpg", "jpeg", "png"];
+
 /// Guard rails so a stray pick of `/` cannot hang the app.
 const MAX_SCAN_DEPTH: usize = 12;
 const MAX_SCAN_FILES: usize = 25_000;
@@ -48,6 +51,8 @@ pub struct Track {
     pub track_no: Option<u32>,
     pub disc_no: Option<u32>,
     pub playable: bool,
+    /// A sibling `cover.{jpg,jpeg,png}` in the track's own folder, if any.
+    pub art: Option<String>,
 }
 
 fn ext_lower(path: &Path) -> Option<String> {
@@ -68,6 +73,19 @@ pub fn is_audio(path: &Path) -> bool {
 
 fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
+}
+
+/// Look for a `cover.{jpg,jpeg,png}` sibling in `dir` — the de facto standard
+/// for a folder's album art when a track has no embedded picture.
+fn find_cover_image(dir: &Path) -> Option<PathBuf> {
+    let read = std::fs::read_dir(dir).ok()?;
+    read.flatten().find_map(|entry| {
+        let path = entry.path();
+        let stem = path.file_stem()?.to_str()?;
+        let ext = ext_lower(&path)?;
+        (stem.eq_ignore_ascii_case("cover") && COVER_EXTS.contains(&ext.as_str()))
+            .then_some(path)
+    })
 }
 
 fn to_string_path(path: &Path) -> String {
@@ -140,6 +158,7 @@ pub fn read_track(path: &Path) -> Track {
         track_no: None,
         disc_no: None,
         playable: is_playable(path),
+        art: path.parent().and_then(find_cover_image).map(|p| to_string_path(&p)),
     };
 
     let Ok(tagged) = lofty::read_from_path(path) else {
@@ -246,5 +265,32 @@ mod tests {
         assert_eq!(t.title, "Song Name");
         assert_eq!(t.duration, None);
         assert!(t.playable);
+    }
+
+    #[test]
+    fn finds_cover_image_case_insensitively() {
+        let dir = std::env::temp_dir().join(format!("scry-cover-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Cover.PNG"), b"fake").unwrap();
+        std::fs::write(dir.join("song.mp3"), b"").unwrap();
+
+        assert_eq!(find_cover_image(&dir), Some(dir.join("Cover.PNG")));
+
+        let t = read_track(&dir.join("song.mp3"));
+        assert_eq!(t.art, Some(dir.join("Cover.PNG").to_string_lossy().into_owned()));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_art_when_no_cover_image_present() {
+        let dir = std::env::temp_dir().join(format!("scry-nocover-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("song.mp3"), b"").unwrap();
+
+        assert_eq!(find_cover_image(&dir), None);
+        assert_eq!(read_track(&dir.join("song.mp3")).art, None);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -1,5 +1,5 @@
 import { Emitter } from '../core/emitter.js';
-import { mediaUrl } from '../tauri.js';
+import { artUrl, mediaUrl } from '../tauri.js';
 
 /**
  * Describe a decode failure.
@@ -103,6 +103,17 @@ export class LocalAdapter extends Emitter {
 
     this.#el.src = url;
     this.#el.load();
+
+    // Resolved separately and not awaited: a missing or unreadable cover
+    // must never hold up or fail the track itself.
+    if (track.art) {
+      artUrl(track.art)
+        .then((resolved) => {
+          if (token !== this.#loadToken) return;
+          this.emit('meta', { artUrl: resolved });
+        })
+        .catch(() => {});
+    }
 
     if (!autoplay) return;
 

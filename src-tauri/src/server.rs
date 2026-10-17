@@ -92,6 +92,21 @@ fn mime_for(path: &Path) -> &'static str {
     }
 }
 
+/// The `<div>` background and `<img>` tags showing cover art need a type
+/// they recognise; default to jpeg since that's the more common cover format.
+fn mime_for_image(path: &Path) -> &'static str {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    match ext.as_str() {
+        "png" => "image/png",
+        _ => "image/jpeg",
+    }
+}
+
 fn query_param(url: &str, key: &str) -> Option<String> {
     let query = url.split_once('?')?.1;
 
@@ -208,6 +223,36 @@ fn handle(request: Request, scope: &MediaScope, token: &str) {
             ));
         }
     }
+}
+
+/// Serves a folder's cover image. Images are small enough to send whole, so
+/// unlike `handle` there's no range support here.
+fn handle_art(request: Request, scope: &MediaScope, token: &str) {
+    let url = request.url().to_string();
+
+    if query_param(&url, "token").as_deref() != Some(token) {
+        return refuse(request, 403);
+    }
+
+    let Some(raw) = query_param(&url, "path") else {
+        return refuse(request, 400);
+    };
+
+    let path = PathBuf::from(raw);
+    if !scope.is_allowed(&path) {
+        return refuse(request, 403);
+    }
+
+    let Ok(file) = File::open(&path) else {
+        return refuse(request, 404);
+    };
+    let Ok(meta) = file.metadata() else {
+        return refuse(request, 500);
+    };
+    let len = meta.len();
+
+    let headers = vec![header("Content-Type", mime_for_image(&path))];
+    let _ = request.respond(Response::new(StatusCode(200), headers, file, Some(len as usize), None));
 }
 
 /// Reads an audio-CD track on demand as a WAV byte stream: the 44-byte
@@ -375,6 +420,8 @@ pub fn start(scope: Arc<MediaScope>) -> Result<MediaServer, String> {
             let path = request.url().split('?').next().unwrap_or("/").to_string();
             if path.starts_with("/youtube-embed") {
                 serve_youtube_embed(request, &path);
+            } else if path.starts_with("/art") {
+                handle_art(request, &scope, &worker_token);
             } else if path.starts_with("/cdda") {
                 handle_cdda(request, &worker_token);
             } else {
@@ -470,6 +517,72 @@ mod tests {
         assert_eq!(get(srv.port, &outside, None).0, 403);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn serves_an_allowed_cover_image() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join(format!("scry-art-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cover = dir.join("cover.png");
+        let body = b"fake-png-bytes".to_vec();
+        std::fs::File::create(&cover).unwrap().write_all(&body).unwrap();
+
+        let scope = Arc::new(MediaScope::default());
+        scope.allow_dir(&dir);
+        let srv = start(scope).unwrap();
+
+        let enc = |p: &Path| {
+            percent_encoding::utf8_percent_encode(
+                p.to_str().unwrap(),
+                percent_encoding::NON_ALPHANUMERIC,
+            )
+            .to_string()
+        };
+        let ok_url = format!("/art?token={}&path={}", srv.token, enc(&cover));
+
+        let (status, head, got) = get(srv.port, &ok_url, None);
+        assert_eq!(status, 200);
+        assert_eq!(got, body);
+        assert!(head.contains("image/png"), "head was: {head}");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refuses_cover_art_with_a_bad_token_or_outside_scope() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join(format!("scry-art-{}", uuid::Uuid::new_v4()));
+        let other_dir = std::env::temp_dir().join(format!("scry-art-other-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&other_dir).unwrap();
+        let cover = dir.join("cover.png");
+        let other_cover = other_dir.join("cover.png");
+        std::fs::File::create(&cover).unwrap().write_all(b"fake").unwrap();
+        std::fs::File::create(&other_cover).unwrap().write_all(b"nope").unwrap();
+
+        let scope = Arc::new(MediaScope::default());
+        scope.allow_dir(&dir); // `other_dir` is deliberately never allowed
+        let srv = start(scope).unwrap();
+
+        let enc = |p: &Path| {
+            percent_encoding::utf8_percent_encode(
+                p.to_str().unwrap(),
+                percent_encoding::NON_ALPHANUMERIC,
+            )
+            .to_string()
+        };
+
+        let bad_token = format!("/art?token=wrong&path={}", enc(&cover));
+        assert_eq!(get(srv.port, &bad_token, None).0, 403);
+
+        let outside_scope = format!("/art?token={}&path={}", srv.token, enc(&other_cover));
+        assert_eq!(get(srv.port, &outside_scope, None).0, 403);
+
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&other_dir).ok();
     }
 
     #[test]

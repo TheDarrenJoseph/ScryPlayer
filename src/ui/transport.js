@@ -70,9 +70,11 @@ export function createTransport(controller) {
       joinMeta(track.artist, track.album) ||
       (track.source === 'youtube' ? 'YouTube' : 'Local file');
 
-    // `videoId` has already been validated against the id pattern, so it is
-    // safe to interpolate into a CSS url().
-    npArt.style.backgroundImage = track.videoId ? `url("${thumbnailFor(track.videoId)}")` : '';
+    // `videoId` has already been validated against the id pattern, and
+    // `artUrl` is built by our own loopback server, so both are safe to
+    // interpolate into a CSS url().
+    const art = track.videoId ? thumbnailFor(track.videoId) : track.artUrl;
+    npArt.style.backgroundImage = art ? `url("${art}")` : '';
   });
 
   controller.on('volume', ({ volume, muted }) => {

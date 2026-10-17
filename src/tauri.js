@@ -30,6 +30,14 @@ export const invoke = api.core.invoke;
 export const mediaUrl = (path) => invoke('media_url', { path });
 
 /**
+ * A loopback URL for a track's folder cover image (e.g. `cover.jpg`), as
+ * found by the backend when the track was scanned.
+ *
+ * @returns {Promise<string>}
+ */
+export const artUrl = (path) => invoke('art_url', { path });
+
+/**
  * The loopback server's port, so the YouTube bridge iframe (see
  * sources/youtubeBridgeAdapter.js) can be pointed at it directly.
  *

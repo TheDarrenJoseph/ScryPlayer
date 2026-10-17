@@ -132,7 +132,13 @@ fn load_tracks(app: AppHandle, paths: Vec<String>) -> Result<Vec<Track>, String>
     for raw in paths {
         let path = PathBuf::from(raw);
         scope.allow_file(&path);
-        tracks.push(media::read_track(&path));
+        let track = media::read_track(&path);
+        // `scan_folder` already covers a cover image via its directory-wide
+        // allow; a track picked on its own needs its cover named explicitly.
+        if let Some(art) = &track.art {
+            scope.allow_file(Path::new(art));
+        }
+        tracks.push(track);
     }
 
     Ok(tracks)
@@ -160,6 +166,22 @@ fn media_url(app: AppHandle, path: String) -> Result<String, String> {
     let server = app.state::<MediaServer>();
     Ok(format!(
         "http://127.0.0.1:{}/media?token={}&path={}",
+        server.port,
+        server.token,
+        utf8_percent_encode(&path, NON_ALPHANUMERIC)
+    ))
+}
+
+/// The loopback URL for a track's folder cover image, as found by `media::read_track`.
+#[tauri::command]
+fn art_url(app: AppHandle, path: String) -> Result<String, String> {
+    if !app.state::<Arc<MediaScope>>().is_allowed(Path::new(&path)) {
+        return Err("That file is outside the folders you have opened.".into());
+    }
+
+    let server = app.state::<MediaServer>();
+    Ok(format!(
+        "http://127.0.0.1:{}/art?token={}&path={}",
         server.port,
         server.token,
         utf8_percent_encode(&path, NON_ALPHANUMERIC)
@@ -321,6 +343,7 @@ pub fn run() {
             load_tracks,
             grant_paths,
             media_url,
+            art_url,
             media_server_port,
             list_cd_drives,
             scan_cd,

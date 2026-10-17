@@ -111,9 +111,20 @@ describe('createTransport', () => {
       assert.match($('np-art').style.backgroundImage, /i\.ytimg\.com\/vi\/dQw4w9WgXcQ/);
     });
 
-    it('carries no artwork for a local file', () => {
+    it('carries no artwork for a local file with no folder cover', () => {
       controller.emit('track', { track: { title: 'x', source: 'local' } });
       assert.equal($('np-art').style.backgroundImage, '');
+    });
+
+    it('shows the folder cover for a local file once resolved', () => {
+      controller.emit('track', {
+        track: {
+          title: 'x',
+          source: 'local',
+          artUrl: 'http://127.0.0.1:1234/art?token=abc&path=%2Fm%2Fcover.jpg',
+        },
+      });
+      assert.match($('np-art').style.backgroundImage, /127\.0\.0\.1:1234\/art/);
     });
 
     it('settles back to nothing when the queue empties', () => {
